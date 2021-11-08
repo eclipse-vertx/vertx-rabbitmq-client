@@ -1,0 +1,178 @@
+= RabbitMQ Client for Vert.x
+
+A Vert.x client allowing applications to interact with a RabbitMQ broker (AMQP 0.9.1) via a reactive API.
+
+**This service is experimental and the APIs are likely to change before settling down.**
+
+The client is a relatively thin wrapper around the standard Java RabbitMQ client, with most interactions wrapped in a call to executeBlocking.
+There should not be many things that can be done with the standard Java RabbitMQ client that cannot be done with this Vertx client.
+One exception is that this Vertx client only supports NIO.
+
+== Getting Started
+
+=== Maven
+
+Add the following dependency to your maven project
+
+[source,xml,subs="+attributes"]
+----
+<dependency>
+  <groupId>io.vertx</groupId>
+  <artifactId>vertx-rabbitmq-client</artifactId>
+  <version>${maven.version}</version>
+</dependency>
+----
+
+=== Gradle
+
+Add the following dependency to your gradle project
+
+[source,groovy,subs="+attributes"]
+----
+dependencies {
+  compile 'io.vertx:vertx-rabbitmq-client:${maven.version}'
+}
+----
+
+=== Create a connection
+
+The object model of the Vertx client mirrors that of the Java RabbitMQ client - a Connection must be created and then this can be used to create multiple Channels.
+Interactions with the broker take place over channels.
+
+The intended behaviour with this library is that a single Connection should be created and a Channel should be created for each type of thing that is to be done.
+For consuming messages this implies a single RabbitMQChannel for each queue being consumed.
+For publishing messages a single RabbitMQChannel can be used for all messages, but this can make handling confirmations more complex, so the recommendation
+is to create as many channels as necessary to keep your structures simple (better to inject a RabbitMQConnection than a RabbitMQChannel).
+
+
+You can create a connection and channel as follows using a full amqp uri:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithUri}
+----
+
+Or you can also specify individual parameters manually:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithManualParameters}
+----
+
+You can also set multiples addresses to connect to a cluster;
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithMultipleHost}
+----
+
+All connections and channels are created lazily and only actually attempt to connect to the server when they are actually used (or when specifically asked to as above).
+Thus a more usual approach to connecting would look like:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionAndUseImmediately}
+----
+
+=== TLS
+
+The first thing to note is that RabbitMQ supports TLSv1.2 and TLSv1.3, depending upon it's configuration.
+Older versions of TLS can be configured, but shouldn't.
+The Java RabbitMQ client cannot be configured to do TLS version negotiation if any other options are specified
+, so it will usually be necessary to ensure that the correct verison is configured in RabbitMQOptions.
+There is a bug in versions of the Java RabbitMQ client prior to 5.13.2 that causes it to hang on connection when TLSv1.3 is used with NIO
+- the default, therefore, is TLSv1.2.
+
+There are three basic type of TLs connection that can be made a RabbitMQ server:
+* Unsecure.
+The server uses a self-signed certificate and the client doesn't care - this should only be used for testing.
+See <<unsecure_tls_connection>>
+* Public Certificate Chain.
+The server uses a certificate signed by a public CA.
+See <<public_chain_connection>>
+* Self-signed, but secure.
+The server uses a certificate that isn't signed by a public CA, but the client has a copy of the certificate and will validate it.
+See <<private_chain_connection>>
+
+In addition to the above the client may be configured to use client certificates to identify the user to the server (see <<public_chain_with_client_cert_connection>>).
+
+There are five options in the RabbitMQOptions that control TLS connections.
+* EnabledSecureTransportProtocols
+This defaults to TLSv1.2 currently.
+Only a single value from this Set will be used, so only use a singleton Set.
+* TrustAll
+If set to true the client will accept any certificate, no further configuration is considered.
+* KeyStoreOptions
+Can be used to set the KeyManagerFactory (for client certs) and TrustManagerFactory (for server certs).
+Any other options in the JksOptions class are ignored.
+If both the KeyManagerFactory and TrustManagerFactory are set to null (or if the KeyStoreOptions aren't set and TrustAll is false) the client will use public certificate chain
+verification.
+* TlsHostnameVerification
+If set to true (the default) the hostname in the server certificate will be verified.
+This should usually be true for public certificate but often needs to be false for private certificate authorities (or self-signed certs).
+* SslContextFactory
+If all else fails the SslContextFactory can be provided to have full control of the SSLContext used.
+
+This provides very simple defaults, if TrustAll is true anything will work, if TrustAll is false public certificate chains should work.
+Extra steps are only required for private certificate chains (or specific versions of TLS).
+
+==== Unsecure TLS Connection [[unsecure_tls_connection]]
+{@link examples.RabbitMQExamples#createWithInsecureServer}
+==== Public Certificate Chain TLS Connection [[public_chain_connection]]
+{@link examples.RabbitMQExamples#createWithPublicCertChain}
+==== Private Certificate Chain with Secure TLS Connection [[private_chain_connection]]
+{@link examples.RabbitMQExamples#createWithSpecificCert}
+==== Public Certificate Chain With Client Certificate TLS Connection [[public_chain_with_client_cert_connection]]
+==== Setting the SslContextFactory manually
+{@link examples.RabbitMQExamples#createWithSslContextFactory}
+
+
+== Operations
+
+The following are some examples of the operations supported by the RabbitMQService API.
+Consult the javadoc/documentation for detailed information on all API methods.
+
+=== Publish
+
+Publish a message to a queue
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublish}
+----
+
+=== Consume
+
+Set up a consumer to receive messages from a queue.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicConsume}
+----
+
+=== Reliable Publishing
+
+Message brokers can be used in two different ways:
+# At most once delivery.
+# At least once delivery.
+Achieving at-most-once delivery is the easiest and the default, 
+and is usually not what is required as it makes no guarantees that messages will arrive at all.
+
+In order to achieve at least once delivery publishers must confirm that messages 
+they have sent have been received by the broker and consumers must accept that individual messages
+may be received more than once.
+Publishers confirming messages can be done either synchronously or asynchronously.
+Synchronous message confirmation is very simple, but has a bad effect on publish rate as publishes 
+must be followed by a call to wait for the broker to confirm receipt.
+Synchronous message confirmations present a problem for an asynchronous system like Vertx - 
+the client must ensure that no calls to basicPublish are made between the publishing of the message(s) they are
+concerned about and the completion of the call to waitForConfirms.
+It is recommended that synchronous confirmations are not used with this client.
+
+Two classes are provided to make handling asynchronous confirmations simpler.
+The first, RabbitMQRepublishingPublisher, tracks all messages sent to it and republishes them on a new
+connection if the channel drops before they are confirmed.
+The second, RabbitMQFuturePublisher, returns a Future for each published message that will be completed when the 
+message is confirmed and failed if either the message is rejected by the broker or if the connection fails.
+
+
+
+
+
+
