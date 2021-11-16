@@ -45,7 +45,7 @@ import org.testcontainers.containers.Network;
 public class RabbitMQClientBuiltinRecoveryTest {
   
   @SuppressWarnings("constantname")
-  private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientBuiltinRecoveryTest.class);
 
   /**
    * This test verifies that the RabbitMQ Java client reconnection logic works as long as the vertx reconnect attempts is set to zero.

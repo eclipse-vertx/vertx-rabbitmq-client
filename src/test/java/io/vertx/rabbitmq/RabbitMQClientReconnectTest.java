@@ -121,7 +121,7 @@ public class RabbitMQClientReconnectTest {
     this.proxy.stopProxy();
   }
 
-  @Test(timeout = 1 * 60 * 1000L)
+  @Test(timeout = 5 * 60 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
     

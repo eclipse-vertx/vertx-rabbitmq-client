@@ -28,10 +28,12 @@ public class RabbitMQConsumerOptions {
   private static final int DEFAULT_QUEUE_SIZE = Integer.MAX_VALUE;
   private static final boolean DEFAULT_AUTO_ACK = true;
   private static final boolean DEFAULT_KEEP_MOST_RECENT = false;
+  private static final long DEFAULT_RECONNECT_INTERVAL = 1000;
 
   private boolean autoAck = DEFAULT_AUTO_ACK;
   private boolean keepMostRecent = DEFAULT_KEEP_MOST_RECENT;
   private int maxInternalQueueSize = DEFAULT_QUEUE_SIZE;
+  private long reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
 
 
   public RabbitMQConsumerOptions() {
@@ -99,4 +101,15 @@ public class RabbitMQConsumerOptions {
   public boolean isKeepMostRecent() {
     return keepMostRecent;
   }
+
+  public long getReconnectInterval() {
+    return reconnectInterval;
+  }
+
+  public RabbitMQConsumerOptions setReconnectInterval(long reconnectInterval) {
+    this.reconnectInterval = reconnectInterval;
+    return this;
+  }
+  
+  
 }

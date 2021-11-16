@@ -17,6 +17,7 @@ package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Address;
+import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -312,18 +313,41 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   }
   
   protected boolean shouldRetryConnection() {
-    if ((config.getReconnectInterval() > 0) && !closed) {
-      if (connectedAtLeastOnce) {
-        if (((config.getReconnectAttempts() < 0) || config.getReconnectAttempts() > reconnectCount)) {
-          ++reconnectCount;
-          return true;
-        }
-      } else if ((config.getInitialConnectAttempts() < 0) || config.getInitialConnectAttempts() > reconnectCount) {
+    if (closed) {
+      logger.debug("Not retrying connection because close has been called");
+      return false;      
+    }
+    if (config.getReconnectInterval() <= 0) {
+      logger.debug("Not retrying connection because reconnect internal ({}) <= 0", config.getReconnectInterval());
+      return false;      
+    }
+    if (connectedAtLeastOnce) {
+      if (config.getReconnectAttempts() < 0) {
+        logger.debug("Retrying because reconnect limit ({}) < 0", config.getReconnectAttempts()); 
         ++reconnectCount;
         return true;
-      }        
-    }
-    return false;
+      } else if (config.getReconnectAttempts() > reconnectCount) {
+        logger.debug("Retrying because reconnect count ({}) < limit ({})", reconnectCount, config.getReconnectAttempts()); 
+        ++reconnectCount;
+        return true;
+      } else {
+        logger.debug("Not retrying connection because reconnect count ({}) >= limit ({})", reconnectCount, config.getReconnectAttempts()); 
+        return false;
+      }
+    } else {
+      if (config.getInitialConnectAttempts() < 0) {
+        logger.debug("Retrying because initial reconnect limit ({}) < 0", config.getInitialConnectAttempts()); 
+        ++reconnectCount;
+        return true;
+      } else if (config.getInitialConnectAttempts() > reconnectCount) {
+        logger.debug("Retrying because reconnect count ({}) < initial limit ({})", reconnectCount, config.getInitialConnectAttempts()); 
+        ++reconnectCount;
+        return true;
+      } else {
+        logger.debug("Not retrying connection because reconnect count ({}) >= initial limit ({})", reconnectCount, config.getInitialConnectAttempts()); 
+        return false;
+      }
+    }        
   }
   
   private void connectBlocking(Promise<Connection> promise) {
@@ -347,6 +371,8 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   
   public Future<Channel> openChannel(long lastInstance) {
     synchronized(connectingPromiseLock) {
+      logger.debug("ConnectionFuture: {}, lastInstance: {}, connectCount: {}, closed: {}"
+              , connectingFuture, lastInstance, this.connectCount.get(), closed);
       if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
         synchronized(connectionLock) {       
           if (lastConnectedInstance != connectCount.get()) {
@@ -362,9 +388,17 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
                 return context.executeBlocking(promise -> {
                   try {                    
                     promise.complete(conn.createChannel());
-                  } catch(IOException ex) {
+                  } catch(AlreadyClosedException | IOException ex) {
                     logger.error("Failed to create channel: ", ex);
                     if (shouldRetryConnection()) {
+                      synchronized(connectingPromiseLock) {
+                        try {
+                          conn.abort();
+                        } catch(Throwable ex2) {
+                          logger.warn("Failed to abort existing connect (should be harmless): ", ex);
+                        }
+                        connectingFuture = null;
+                      }
                       openChannel(lastInstance).onComplete(promise);
                     }
                     promise.fail(ex);

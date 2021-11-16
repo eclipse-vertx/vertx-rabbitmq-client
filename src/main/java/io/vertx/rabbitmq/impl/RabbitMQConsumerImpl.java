@@ -24,6 +24,7 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.streams.impl.InboundBuffer;
@@ -43,6 +44,7 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
   private static final Logger log = LoggerFactory.getLogger(RabbitMQConsumerImpl.class);
 
   private final RabbitMQChannelImpl channel;
+  private final Vertx vertx;
   private final Context vertxContext;
 
   private Handler<Throwable> exceptionHandler;
@@ -53,21 +55,24 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
   private final InboundBuffer<RabbitMQMessage> pending;
   private final int maxQueueSize;
   private volatile boolean cancelled;
-  private final boolean shouldReconnect;
+  private final long reconnectInterval;
   private boolean exclusive;
-  private AtomicLong consumeCount = new AtomicLong();
+  private final AtomicLong consumeCount = new AtomicLong();
   private Map<String, Object> arguments;
+  private final ConsumerBridge bridge;
 
-  public RabbitMQConsumerImpl(Context vertxContext, RabbitMQChannelImpl channel, String queueName, RabbitMQConsumerOptions options, boolean shouldReconnect) {
+  public RabbitMQConsumerImpl(Vertx vertx, Context vertxContext, RabbitMQChannelImpl channel, String queueName, RabbitMQConsumerOptions options) {
     this.channel = channel;
 
+    this.vertx = vertx;
     this.vertxContext = vertxContext;
     this.keepMostRecent = options.isKeepMostRecent();
     this.maxQueueSize = options.getMaxInternalQueueSize();
     this.pending = new InboundBuffer<>(vertxContext, maxQueueSize);
     pending.resume();
     this.queueName = queueName;    
-    this.shouldReconnect = shouldReconnect;
+    this.reconnectInterval = options.getReconnectInterval();
+    this.bridge = new ConsumerBridge();
   }
   
   private class ConsumerBridge implements Consumer {
@@ -91,9 +96,10 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
     @Override
     public void handleShutdownSignal(String tag, ShutdownSignalException sig) {    
       log.info("handleShutdownSignal " +tag);
-      if (shouldReconnect && !cancelled) {
+      if ((reconnectInterval > 0) && !cancelled) {
         long count = consumeCount.incrementAndGet();
-        channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, new ConsumerBridge());
+        log.debug("consume count: " + count);        
+        consume(Promise.promise());
       }
     }
 
@@ -110,17 +116,32 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
     }    
   }
 
+  private Future<String> consume(Promise<String> promise) {
+    channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, bridge)
+            .onSuccess(consumerTag -> promise.complete(consumerTag))
+            .onFailure(ex -> {
+              if (reconnectInterval > 0 && ! cancelled) {
+                log.debug("Failed to consume, will try again");
+                vertx.setTimer(reconnectInterval, (id) -> {
+                  consume(promise);
+                });
+              } else {
+                log.debug("Failed to consume: ", ex);
+                promise.fail(ex);
+              }
+            });
+    return promise.future();
+  }
+
   @Override
   public Future<String> consume(boolean exclusive, Map<String, Object> arguments) {
     if (!consumeCount.compareAndSet(0, 1)) {
-      throw new IllegalStateException("consume has already been called");
+      return Future.failedFuture(new IllegalStateException("consume has already been called"));
     }
     this.exclusive = exclusive;
     this.arguments = arguments;
     return channel.connect()
-            .compose(v -> {
-              return channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, new ConsumerBridge());
-            })
+            .compose(v -> consume(Promise.<String>promise()))
             ;
   }
   

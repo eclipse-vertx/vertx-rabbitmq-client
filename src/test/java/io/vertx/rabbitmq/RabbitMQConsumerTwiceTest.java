@@ -105,7 +105,7 @@ public class RabbitMQConsumerTwiceTest {
               }
             })
             .compose(v -> {
-              return createAndStartConsumer(conChannel)
+              return consumer.consume(false, null)
                       .onComplete(ar -> {
                         // Second one should have failed
                         if (ar.succeeded()) {

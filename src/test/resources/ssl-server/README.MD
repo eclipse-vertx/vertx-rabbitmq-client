@@ -1,8 +1,8 @@
 
 The CA configuration here was created using the approach documented by RabbitMQ (https://www.rabbitmq.com/ssl.html#manual-certificate-generation) with three differences:
-# The openssl config file is in the dir above the ca dir (to make it easier to clear out the entire ca)
-# The ca dir is called ca, not testca
-# The passwords are always "password", not MyTestPassword.
+1. The openssl config file is in the dir above the ca dir (to make it easier to clear out the entire ca)
+1. The ca dir is called ca, not testca
+1. The passwords are always "password", not MyTestPassword.
 
 This gives (starting in the ssl-server dir):
 ```
@@ -51,3 +51,4 @@ cd ..
 keytool -import -alias server1 -file server/server_certificate.pem -keystore localhost-test-rabbit-store
 ```
 
+Note that keystores are not backward compatible (i.e. if the keystore is created using JDK17 it may not be readable using JDK1.8).

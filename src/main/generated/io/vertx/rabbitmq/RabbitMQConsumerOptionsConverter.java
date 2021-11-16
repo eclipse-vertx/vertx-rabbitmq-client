@@ -35,6 +35,11 @@ public class RabbitMQConsumerOptionsConverter {
             obj.setMaxInternalQueueSize(((Number)member.getValue()).intValue());
           }
           break;
+        case "reconnectInterval":
+          if (member.getValue() instanceof Number) {
+            obj.setReconnectInterval(((Number)member.getValue()).longValue());
+          }
+          break;
       }
     }
   }
@@ -47,5 +52,6 @@ public class RabbitMQConsumerOptionsConverter {
     json.put("autoAck", obj.isAutoAck());
     json.put("keepMostRecent", obj.isKeepMostRecent());
     json.put("maxInternalQueueSize", obj.getMaxInternalQueueSize());
+    json.put("reconnectInterval", obj.getReconnectInterval());
   }
 }

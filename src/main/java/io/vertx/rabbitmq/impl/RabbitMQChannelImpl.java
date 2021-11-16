@@ -107,7 +107,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   
   @Override
   public RabbitMQConsumer createConsumer(String queue, RabbitMQConsumerOptions options) {
-    RabbitMQConsumerImpl consumer = new RabbitMQConsumerImpl(vertx.getOrCreateContext(), this, queue, options, retries > 0);    
+    RabbitMQConsumerImpl consumer = new RabbitMQConsumerImpl(vertx, vertx.getOrCreateContext(), this, queue, options);    
     return consumer;
   }
 

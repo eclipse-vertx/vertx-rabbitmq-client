@@ -16,6 +16,7 @@
 package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
+import com.rabbitmq.client.AlreadyClosedException;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -198,18 +199,24 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
     doSend(md);
   }
 
-  private boolean wasIoRelated(Throwable ex) {
+  private boolean wasReconnectableFault(Throwable ex) {
+    if (ex instanceof AlreadyClosedException) {
+      return true;
+    }
     while(ex != null) {
       if (ex instanceof IOException) {
+        log.debug("Exception was IO related");
         return true;
       }
       ex = ex.getCause();
     }
+    log.debug("Exception was not IO related");
     return false;
   }
   
   private void doSend(MessageDetails md) {
     try {
+      log.debug("doSend({})", md.message);
       channel.basicPublish(md.exchange, md.routingKey, false, md.properties, md.message, dt -> { md.setDeliveryTag(lastChannelId, dt); })
               .onComplete(ar -> {
                 sendQueue.resume();
@@ -224,7 +231,7 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
                     }
                     sendQueue.resume();
                   } else {
-                    if (wasIoRelated(ar.cause()) && shouldReconnect) {
+                    if (wasReconnectableFault(ar.cause()) && shouldReconnect) {
                       channel.connect()
                               .onSuccess(v -> doSend(md))
                               ;
@@ -236,7 +243,7 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
                 }
               });
     } catch(Throwable ex) {
-      if (wasIoRelated(ex)&& shouldReconnect) {
+      if (wasReconnectableFault(ex)&& shouldReconnect) {
         channel.connect()
                 .onSuccess(v -> doSend(md))
                 ;

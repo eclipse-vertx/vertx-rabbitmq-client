@@ -109,20 +109,6 @@ public class RabbitMQExamples {
             });
   }
   
-  public void basicPublish() {
-    Vertx vertx = Vertx.vertx();
-    RabbitMQOptions config = new RabbitMQOptions();
-    config.setUri("amqp://brokerhost/vhost");
-    config.setConnectionName(this.getClass().getSimpleName());
-    
-    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
-    RabbitMQChannel channel = connection.createChannel();
-    channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
-            .compose(v -> channel.basicPublish("exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
-            .onComplete(ar -> {
-            });
-  }
-  
   /**
    * @see RabbitMQSslTest#testCreateWithInsecureServer(TestContext context)
    */
@@ -156,10 +142,10 @@ public class RabbitMQExamples {
             .setUri("amqps://localhost:5671")
             .setConnectionName(ManagementFactory.getRuntimeMXBean().getName())
             .setTlsHostnameVerification(false)
-            .setKeyStoreOptions(
+            .setTrustStoreOptions(
                     new JksOptions()
                             .setPassword("password")
-                            .setPath("/etc/ssl-server/localhost-test-rabbit-store") // Full path to keystore file
+                            .setPath("/etc/ssl-server/localhost-test-rabbit-store") // Full path to trust store file
             )
             ;
 
@@ -245,18 +231,50 @@ public class RabbitMQExamples {
             });
   }
   
-  private static class ExampleConsumer extends DefaultConsumer {
+  public void createWithClientCert() throws Exception {
+    Vertx vertx = Vertx.vertx();
+    RabbitMQOptions config = new RabbitMQOptions()
+            .setUri("amqps://localhost:5671")
+            .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
+            .setTlsHostnameVerification(false)
+            .setTrustStoreOptions(
+                    new JksOptions()
+                            .setPassword("password")
+                            .setPath("/etc/ssl-server/localhost-test-rabbit-store") // Full path to trust store file
+            )
+            .setKeyStoreOptions(
+                    new JksOptions()
+                            .setPassword("password")
+                            .setPath("/etc/ssl-server/client/client_certificate.p12") // Full path to key store file
+            )
+            ;
 
-    public ExampleConsumer(RabbitMQChannel channel) {
-      super(channel);
-    }
-
-    @Override
-    public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-      System.out.println(new String(body, StandardCharsets.UTF_8));
-    }
-    
+    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);
+    RabbitMQChannel channel = connection.createChannel();
+    channel.connect()
+            .compose(v -> channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null))
+            .onComplete(ar -> {
+              if (ar.succeeded()) {
+                logger.info("Exchange declared");
+              } else {
+                logger.info("Failing test");
+              }
+            });
   }
+  
+  public void basicPublish() {
+    Vertx vertx = Vertx.vertx();
+    RabbitMQOptions config = new RabbitMQOptions();
+    config.setUri("amqp://brokerhost/vhost");
+    config.setConnectionName(this.getClass().getSimpleName());
+    
+    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
+    RabbitMQChannel channel = connection.createChannel();
+    channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
+            .compose(v -> channel.basicPublish("exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
+            .onComplete(ar -> {
+            });
+  }  
   
   public void basicConsume() {
     Vertx vertx = Vertx.vertx();
@@ -269,7 +287,12 @@ public class RabbitMQExamples {
     channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
             .compose(v -> channel.queueDeclare("queue", true, true, true, null))
             .compose(v -> channel.queueBind("queue", "exchange", "", null))
-            .compose(v -> channel.basicConsume("queue", true, channel.getChannelId(), false, false, null, new ExampleConsumer(channel)))
+            .compose(v -> channel.basicConsume("queue", true, channel.getChannelId(), false, false, null, new DefaultConsumer(channel) {              
+              @Override
+              public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                System.out.println(new String(body, StandardCharsets.UTF_8));
+              }
+            }))
             .onComplete(ar -> {
             });
   }

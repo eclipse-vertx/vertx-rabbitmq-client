@@ -6,6 +6,7 @@
 .settings
 .yardoc
 .yardopts
+bin
 build
 target
 out
@@ -19,5 +20,6 @@ test-results
 test-tmp
 *.class
 *.swp
-.vertx
 .java-version
+nb-configuration.xml
+/nbproject/
