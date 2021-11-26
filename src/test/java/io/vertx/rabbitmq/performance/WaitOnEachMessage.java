@@ -51,6 +51,11 @@ public class WaitOnEachMessage implements RabbitMQPublisherStresser {
   }
 
   @Override
+  public Future<Void> shutdown() {
+    return channel.close();
+  }
+  
+  @Override
   public Future<Void> runTest(long iterations) {
     Promise<Void> promise = Promise.promise();
     counter.set(iterations);

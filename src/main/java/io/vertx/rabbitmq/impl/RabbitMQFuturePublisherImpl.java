@@ -25,7 +25,9 @@ import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +38,7 @@ import org.slf4j.LoggerFactory;
  */
 public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
   
-  private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQFuturePublisherImpl.class);
 
   private final Vertx vertx;
   private final RabbitMQChannel channel;
@@ -45,8 +47,44 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
   private final RabbitMQPublisherOptions options;
 
   private String lastChannelId = null;
-  private long head = 0;
-  private static IndexedQueue<Promise<Void>> promises = new IndexedQueue<>();
+  //private static IndexedQueue<TaggedPromise> promises = new IndexedQueue<>();
+  private static Deque<TaggedPromise> promises = new ArrayDeque<>();
+    
+  private static class TaggedPromise {
+    final long deliveryTag;
+    final Promise<Void> promise;
+
+    TaggedPromise(long deliveryTag, Promise<Void> promise) {
+      this.deliveryTag = deliveryTag;
+      this.promise = promise;
+    }    
+
+    @Override
+    public int hashCode() {
+      int hash = 5;
+      hash = 71 * hash + (int) (this.deliveryTag ^ (this.deliveryTag >>> 32));
+      return hash;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (obj == null) {
+        return false;
+      }
+      if (getClass() != obj.getClass()) {
+        return false;
+      }
+      final TaggedPromise other = (TaggedPromise) obj;
+      if (this.deliveryTag != other.deliveryTag) {
+        return false;
+      }
+      return true;
+    }
+        
+  }
   
   public RabbitMQFuturePublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options) {
     this.vertx = vertx;
@@ -61,10 +99,8 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
                   if (lastChannelId == null) {
                     lastChannelId = channel.getChannelId();
                   } else if (!lastChannelId.equals(channel.getChannelId())) {
-                    context.runOnContext(v -> {
-                      List<Promise> failedFutures = copyPromises();
-                      failedFutures.forEach(promise -> promise.fail("Channel reconnected"));
-                    });
+                    List<TaggedPromise> failedPromises = copyPromises();
+                    failedPromises.forEach(tp -> tp.promise.fail("Channel reconnected"));
                   }
                   p.complete();
                 } else {
@@ -74,22 +110,22 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
     });
     this.channel.addChannelRecoveryCallback(c -> {
       context.runOnContext(v -> {
-        List<Promise> failedFutures = copyPromises();
-        promises.forEach(p -> p.fail("Channel reconnected"));
+        List<TaggedPromise> failedFutures = copyPromises();
+        promises.forEach(tp -> tp.promise.fail("Channel reconnected"));
       });
     });
   }
 
-  private List<Promise> copyPromises() {
-    List<Promise> failedFutures;
+  private List<TaggedPromise> copyPromises() {
+    List<TaggedPromise> failedPromises;
     synchronized(promises) {
-      failedFutures = new ArrayList<>(promises.size());
-      for(Promise promise : promises) {
-        failedFutures.add(promise);
+      failedPromises = new ArrayList<>(promises.size());
+      for(TaggedPromise promise : promises) {
+        failedPromises.add(promise);
       }
       promises.clear();
     }
-    return failedFutures;
+    return failedPromises;
   }
   
   protected final Future<Void> addConfirmListener() {
@@ -108,17 +144,25 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
   
   private void handleConfirmation(RabbitMQConfirmation rawConfirmation) {
     synchronized(promises) {
-      if (rawConfirmation.isMultiple() || rawConfirmation.getDeliveryTag() == head) {
-        while(head <= rawConfirmation.getDeliveryTag()) {
-          ++head;
-          Promise<Void> promise = promises.removeFirst();
-          completePromise(promise, rawConfirmation);
+      if (promises.isEmpty()) {
+        log.error("Confirmation received whilst there are no pending promises!");
+        return ;
+      }
+      TaggedPromise head = promises.getFirst();
+      if (rawConfirmation.isMultiple() || (head.deliveryTag == rawConfirmation.getDeliveryTag())) {
+        while(!promises.isEmpty() && promises.getFirst().deliveryTag  <= rawConfirmation.getDeliveryTag()) {
+          TaggedPromise tp = promises.removeFirst();
+          completePromise(tp.promise, rawConfirmation);
         }
       } else {
-        long index = rawConfirmation.getDeliveryTag() - head;
-        Promise<Void> promise = promises.get((int) index);
-        promises.set((int) index, null);
-        completePromise(promise, rawConfirmation);
+        log.warn("Searching for promise for {} where leading promise has :(", rawConfirmation.getDeliveryTag(), promises.getFirst().deliveryTag);
+        for (TaggedPromise tp : promises) {
+          if (tp.deliveryTag == rawConfirmation.getDeliveryTag()) {
+            completePromise(tp.promise, rawConfirmation);
+            promises.remove(tp);
+            break ;
+          }
+        }
       }
     }
   }
@@ -142,9 +186,8 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
   public Future<Void> publish(String routingKey, AMQP.BasicProperties properties, byte[] body) {
     Promise<Void> promise = Promise.promise();
     channel.basicPublish(exchange, routingKey, false, properties, body, deliveryTag -> {
-      log.info("Message {} has delivery tag {}", new String(body), deliveryTag);
       synchronized(promises) {
-        promises.set((int) (deliveryTag - head), promise);
+        promises.addLast(new TaggedPromise(deliveryTag, promise));
       }
     });
     return promise.future();

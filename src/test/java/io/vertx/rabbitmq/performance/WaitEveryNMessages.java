@@ -53,11 +53,17 @@ public class WaitEveryNMessages implements RabbitMQPublisherStresser {
   }
 
   @Override
+  public Future<Void> shutdown() {
+    return channel.close();
+  }
+  
+  @Override
   public Future<Void> runTest(long iterations) {
     Promise<Void> promise = Promise.promise();
     counter.set(iterations);
     runIteration(promise);
-    return promise.future();
+    return promise.future()
+            .compose(v -> channel.waitForConfirms(10000));
   }
   
   private void runIteration(Promise<Void> promise) {

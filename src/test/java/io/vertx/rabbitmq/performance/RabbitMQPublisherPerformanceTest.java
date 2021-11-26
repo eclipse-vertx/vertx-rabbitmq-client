@@ -36,6 +36,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -54,8 +62,8 @@ public class RabbitMQPublisherPerformanceTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientTest.class);
   
-  private static final long WARMUP_ITERATIONS = 10;// * 1000;
-  private static final long ITERATIONS = 50;// * 1000;
+  private static final long WARMUP_ITERATIONS = 10 * 1000;
+  private static final long ITERATIONS = 50 * 1000;
   
   @ClassRule
   public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
@@ -77,9 +85,33 @@ public class RabbitMQPublisherPerformanceTest {
   private final List<Result> results = new ArrayList();
 
   public RabbitMQOptions config() {
+    ExecutorService execSvc = new ThreadPoolExecutor(8, 16, 1, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1000), new ThreadFactory() {
+      private final AtomicInteger counter = new AtomicInteger();
+      @Override
+      public Thread newThread(Runnable r) {
+        return new Thread(r, "RabbitMQ ExecutorService " + counter.incrementAndGet());
+      }
+    });
+    ScheduledExecutorService heartbeatSvc = new ScheduledThreadPoolExecutor(4, new ThreadFactory() {
+      private final AtomicInteger counter = new AtomicInteger();
+      @Override
+      public Thread newThread(Runnable r) {
+        return new Thread(r, "RabbitMQ HeartbeatThread " + counter.incrementAndGet());
+      }
+    });
     RabbitMQOptions config = new RabbitMQOptions();
     config.setUri("amqp://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5672));
     config.setConnectionName(this.getClass().getSimpleName());
+    config.setHeartbeatExecutor(heartbeatSvc);
+    config.setSharedExecutor(execSvc);
+    config.setShutdownExecutor(execSvc);
+    config.setThreadFactory(new ThreadFactory() {
+      private final AtomicInteger counter = new AtomicInteger();
+      @Override
+      public Thread newThread(Runnable r) {
+        return new Thread(r, "RabbitMQ " + counter.incrementAndGet());
+      }
+    });
     return config;
   }
   
@@ -124,12 +156,12 @@ public class RabbitMQPublisherPerformanceTest {
     
     List<RabbitMQPublisherStresser> tests = Arrays.asList(
             new FireAndForget(connection)
-//            , new WaitOnEachMessage(connection)
-//            , new WaitEveryNMessages(connection, 10)
-//            , new WaitEveryNMessages(connection, 100)
-//            , new WaitEveryNMessages(connection, 1000)
-//            , new FuturePublisher(connection)
-//            , new ReliablePublisher(connection)
+            , new WaitOnEachMessage(connection)
+            , new WaitEveryNMessages(connection, 10)
+            , new WaitEveryNMessages(connection, 100)
+            , new WaitEveryNMessages(connection, 1000)
+            , new FuturePublisher(connection)
+            , new RepublishingPublisher(connection)
     );
 
     channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
@@ -183,7 +215,7 @@ public class RabbitMQPublisherPerformanceTest {
                           results.add(new Result(test.getName(), duration));
                           double seconds = duration / 1000.0;
                           logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, ITERATIONS / seconds);
-                          return Future.<Void>succeededFuture();
+                          return test.shutdown();
                         });
               })
               .onComplete(promise);

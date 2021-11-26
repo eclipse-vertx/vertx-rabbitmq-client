@@ -97,7 +97,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
 
   @Override
   public RabbitMQRepublishingPublisher createPublisher(String exchange, RabbitMQPublisherOptions options) {
-    return new RabbitMQPublisherImpl(vertx, this, exchange, options, retries > 0);
+    return new RabbitMQRepublishingPublisherImpl(vertx, this, exchange, options, retries > 0);
   }
 
   @Override
@@ -197,7 +197,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     if (retries > 0) {
       this.knownConnectionInstance = -1;
     }
-    log.info("Channel {} Shutdown: {}", this, cause.getMessage());
+    log.trace("Channel {} Shutdown: {}", this, cause.getMessage());
     for (Handler<ShutdownSignalException> handler : shutdownHandlers) {
       handler.handle(cause);
     }

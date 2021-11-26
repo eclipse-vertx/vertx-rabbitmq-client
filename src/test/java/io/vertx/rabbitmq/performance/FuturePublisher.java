@@ -23,7 +23,6 @@ import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
-import io.vertx.rabbitmq.impl.RabbitMQChannelImpl;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -35,7 +34,7 @@ import org.slf4j.LoggerFactory;
  */
 public class FuturePublisher implements RabbitMQPublisherStresser {
 
-  private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelImpl.class);
+  private static final Logger log = LoggerFactory.getLogger(FuturePublisher.class);
   
   private final RabbitMQChannel channel;
   private String exchange;
@@ -61,12 +60,17 @@ public class FuturePublisher implements RabbitMQPublisherStresser {
     publisher = channel.createFuturePublisher(exchange, new RabbitMQPublisherOptions().setMaxInternalQueueSize(1000000));
     return Future.succeededFuture();
   }
+  
+  @Override
+  public Future<Void> shutdown() {
+    return channel.close();
+  }
 
   @Override
   public Future<Void> runTest(long iterations) {
     List<Future> confirmations = new ArrayList<>();
     for (long i = 0; i < iterations; ++i) {
-      String idString = Long.toString(i);
+      String idString = "MSG:" + Long.toString(i);
       confirmations.add(
               publisher.publish(""
                       , new AMQP.BasicProperties.Builder()
@@ -78,8 +82,9 @@ public class FuturePublisher implements RabbitMQPublisherStresser {
     }
     return CompositeFuture
             .all(confirmations)
-            .compose(cf -> Future.<Void>succeededFuture())
-            ;
+            .compose(cf -> {
+              return Future.<Void>succeededFuture();
+            });
   }
   
 }

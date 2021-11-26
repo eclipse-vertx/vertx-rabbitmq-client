@@ -79,7 +79,7 @@ The Java RabbitMQ client cannot be configured to do TLS version negotiation if a
 There is a bug in versions of the Java RabbitMQ client prior to 5.14.0 that causes it to hang on connection when TLSv1.3 is used with NIO
 - please call RabbitMQOptions#setSecureTransportProtocol("TLSv1.2") if using an earlier version.
 
-There are three basic type of TLs connection that can be made a RabbitMQ server:
+There are three basic type of TLs connection that can be made to a RabbitMQ server:
 
 * Unsecure.
 The server uses a self-signed certificate and the client doesn't care - this should only be used for testing.
@@ -102,25 +102,31 @@ ssl_options.fail_if_no_peer_cert = true
 There are six options in the RabbitMQOptions that control TLS connections.
 
 * SecureTransportProtocol
++
 This defaults to TLSv1.3 currently (use TLSv1.2 is using a version of the RabbitMQ client library before 5.14.0).
 * TrustAll
++
 If set to true the client will accept any certificate, no further configuration is considered.
 * TrustStoreOptions
++
 Can be used to set the TrustManagerFactory for server certificates.
 Any other options in the JksOptions class are ignored.
 If the TrustManagerFactory is null (or if TrustStoreOptions isn't set and TrustAll is false) the client will use public certificate chain verification.
 * KeyStoreOptions
++
 Can be used to set the KeyManagerFactory for client certificates.
 Any other options in the JksOptions class are ignored.
 If both the KeyManagerFactory is set to null (or if the KeyStoreOptions aren't set) no client certificate will be sent to the server.
 * TlsHostnameVerification
++
 If set to true (the default) the hostname in the server certificate will be verified.
 This should usually be true for public certificate but often needs to be false for private certificate authorities (or self-signed certs).
 * SslContextFactory
++
 If all else fails the SslContextFactory can be provided to have full control of the SSLContext used.
 
 This provides very simple defaults, if TrustAll is true anything will work, if TrustAll is false public certificate chains should work.
-Extra steps are only required for private certificate chains (or specific versions of TLS).
+Extra steps are only required for private certificate chains or specific versions of TLS.
 
 ==== Unsecure TLS Connection
 [source,$lang]
@@ -184,12 +190,11 @@ In order to achieve at least once delivery publishers must confirm that messages
 they have sent have been received by the broker and consumers must accept that individual messages
 may be received more than once.
 Publishers confirming messages can be done either synchronously or asynchronously.
-Synchronous message confirmation is very simple, but has a bad effect on publish rate as publishes 
+Synchronous message confirmation is very simple, but has a bad effect on publish rate as each published message
 must be followed by a call to wait for the broker to confirm receipt.
 Synchronous message confirmations present a problem for an asynchronous system like Vertx - 
 the client must ensure that no calls to basicPublish are made between the publishing of the message(s) they are
 concerned about and the completion of the call to waitForConfirms.
-It is recommended that synchronous confirmations are not used with this client.
 
 Two classes are provided to make handling asynchronous confirmations simpler.
 The first, RabbitMQRepublishingPublisher, tracks all messages sent to it and republishes them on a new
@@ -197,6 +202,48 @@ connection if the channel drops before they are confirmed.
 The second, RabbitMQFuturePublisher, returns a Future for each published message that will be completed when the 
 message is confirmed and failed if either the message is rejected by the broker or if the connection fails.
 
+The table below can be used to get an idea of the throughput that can be achieved with different approaches.
+These values were obtained from running the RabbitMQPublisherPerformanceTest test on an AMD 5950X with 64GB of RAM
+, different setups and network configurations will produce different results, though I expect the general trends to be the same.
+
+.Table Performance metrics for different publishing approaches.
+|===
+|Approach
+|Time for 50000 messages (seconds)
+|Rate (messages/second)
+
+|Fire and forget (no message confirmation)	
+|1.08	
+|46296
+
+|Wait on each message
+|37.718
+|1325
+
+|Wait after 10 messages
+|8.158
+|6128
+
+|Wait after 100 messages
+|5.064s
+|9873
+
+|Wait after 1000 messages
+|4.633
+|10792
+
+|Future publisher
+|1.329
+|37622
+
+|Republishing publisher
+|4.728
+|10575
+
+|===
+
+The FuturePublisher creates a Promise for each message published and stores them in a Deque,
+When confirmations are received from RabbitMQ the Promises are completed.
 
 
 

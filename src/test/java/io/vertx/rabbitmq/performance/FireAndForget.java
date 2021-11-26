@@ -49,6 +49,11 @@ public class FireAndForget implements RabbitMQPublisherStresser {
   }
 
   @Override
+  public Future<Void> shutdown() {
+    return channel.close();
+  }
+
+  @Override
   public Future<Void> runTest(long iterations) {
     counter.set(iterations);
     long iter;

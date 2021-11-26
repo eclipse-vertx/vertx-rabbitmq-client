@@ -23,7 +23,6 @@ import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import io.vertx.rabbitmq.RabbitMQRepublishingPublisher;
-import io.vertx.rabbitmq.impl.RabbitMQChannelImpl;
 import java.util.HashSet;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -33,15 +32,15 @@ import org.slf4j.LoggerFactory;
  *
  * @author jtalbut
  */
-public class ReliablePublisher implements RabbitMQPublisherStresser {
+public class RepublishingPublisher implements RabbitMQPublisherStresser {
 
-  private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelImpl.class);
+  private static final Logger log = LoggerFactory.getLogger(RepublishingPublisher.class);
   
   private final RabbitMQChannel channel;
   private String exchange;
   private RabbitMQRepublishingPublisher publisher;
 
-  public ReliablePublisher(RabbitMQConnection connection) {
+  public RepublishingPublisher(RabbitMQConnection connection) {
     this.channel = connection.createChannel();
   }
   
@@ -63,6 +62,11 @@ public class ReliablePublisher implements RabbitMQPublisherStresser {
     return Future.succeededFuture();
   }
 
+  @Override
+  public Future<Void> shutdown() {
+    return channel.close();
+  }
+  
   @Override
   public Future<Void> runTest(long iterations) {
     for (long i = 0; i < iterations; ++i) {

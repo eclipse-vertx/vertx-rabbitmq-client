@@ -44,9 +44,9 @@ import io.vertx.rabbitmq.RabbitMQRepublishingPublisher;
  *
  * @author jtalbut
  */
-public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, ReadStream<RabbitMQPublisherConfirmation> {
+public class RabbitMQRepublishingPublisherImpl implements RabbitMQRepublishingPublisher, ReadStream<RabbitMQPublisherConfirmation> {
   
-  private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQRepublishingPublisherImpl.class);
   
   private final Vertx vertx;
   private final RabbitMQChannel channel;
@@ -90,7 +90,7 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
 
   }
   
-  public RabbitMQPublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options, boolean shouldReconnect) {
+  public RabbitMQRepublishingPublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options, boolean shouldReconnect) {
     this.vertx = vertx;
     this.channel = channel;
     this.exchange = exchange;
@@ -216,7 +216,6 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
   
   private void doSend(MessageDetails md) {
     try {
-      log.debug("doSend({})", md.message);
       channel.basicPublish(md.exchange, md.routingKey, false, md.properties, md.message, dt -> { md.setDeliveryTag(lastChannelId, dt); })
               .onComplete(ar -> {
                 sendQueue.resume();
@@ -295,37 +294,37 @@ public class RabbitMQPublisherImpl implements RabbitMQRepublishingPublisher, Rea
   }
   
   @Override
-  public RabbitMQPublisherImpl exceptionHandler(Handler<Throwable> hndlr) {
+  public RabbitMQRepublishingPublisherImpl exceptionHandler(Handler<Throwable> hndlr) {
     confirmations.exceptionHandler(hndlr);
     return this;
   }
 
   @Override
-  public RabbitMQPublisherImpl handler(Handler<RabbitMQPublisherConfirmation> hndlr) {
+  public RabbitMQRepublishingPublisherImpl handler(Handler<RabbitMQPublisherConfirmation> hndlr) {
     confirmations.handler(hndlr);
     return this;
   }
 
   @Override
-  public RabbitMQPublisherImpl pause() {
+  public RabbitMQRepublishingPublisherImpl pause() {
     confirmations.pause();
     return this;
   }
 
   @Override
-  public RabbitMQPublisherImpl resume() {
+  public RabbitMQRepublishingPublisherImpl resume() {
     confirmations.resume();
     return this;
   }
 
   @Override
-  public RabbitMQPublisherImpl fetch(long l) {
+  public RabbitMQRepublishingPublisherImpl fetch(long l) {
     confirmations.fetch(l);
     return this;
   }
 
   @Override
-  public RabbitMQPublisherImpl endHandler(Handler<Void> hndlr) {
+  public RabbitMQRepublishingPublisherImpl endHandler(Handler<Void> hndlr) {
     return this;
   }
 

@@ -48,6 +48,7 @@ public class RabbitMQBrokerProvider {
   }
   
   public static GenericContainer getRabbitMqContainer() {
+    
     synchronized(lock) {
       if (network == null) {
         network = Network.newNetwork();        

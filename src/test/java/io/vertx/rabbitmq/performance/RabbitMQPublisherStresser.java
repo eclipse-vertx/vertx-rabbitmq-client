@@ -25,4 +25,5 @@ public interface RabbitMQPublisherStresser {
   String getName();
   Future<Void> init(String exchange);
   Future<Void> runTest(long iterations);
+  Future<Void> shutdown();
 }
