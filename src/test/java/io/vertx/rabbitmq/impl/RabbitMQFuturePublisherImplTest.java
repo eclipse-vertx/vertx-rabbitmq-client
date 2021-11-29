@@ -28,7 +28,6 @@ import io.vertx.ext.unit.junit.VertxUnitRunner;
 import io.vertx.rabbitmq.RabbitMQBrokerProvider;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQClient;
-import io.vertx.rabbitmq.RabbitMQClientReconnectTest;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
@@ -56,7 +55,7 @@ import org.testcontainers.containers.Network;
 public class RabbitMQFuturePublisherImplTest {
   
   @SuppressWarnings("constantname")
-  private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(RabbitMQFuturePublisherImplTest.class);
 
   /**
    * This test verifies that the RabbitMQ Java client reconnection logic works as long as the vertx reconnect attempts is set to zero.
@@ -75,8 +74,6 @@ public class RabbitMQFuturePublisherImplTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
-
   private final Network network;
   private final GenericContainer networkedRabbitmq;
   
@@ -94,7 +91,7 @@ public class RabbitMQFuturePublisherImplTest {
   private RabbitMQConsumer consumer;
   
   public RabbitMQFuturePublisherImplTest() throws IOException {
-    LOGGER.info("Constructing");
+    logger.info("Constructing");
     this.network = RabbitMQBrokerProvider.getNetwork();
     this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));

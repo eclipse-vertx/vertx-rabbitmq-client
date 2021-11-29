@@ -51,8 +51,6 @@ public class RabbitMQConsumerTwiceTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = true;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = true;
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMQConsumerTwiceTest.class);
-
   private final Network network;
   private final GenericContainer networkedRabbitmq;
   
@@ -63,7 +61,7 @@ public class RabbitMQConsumerTwiceTest {
   private RabbitMQConsumer consumer;
   
   public RabbitMQConsumerTwiceTest() throws IOException {
-    LOGGER.info("Constructing");
+    logger.info("Constructing");
     this.network = RabbitMQBrokerProvider.getNetwork();
     this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));

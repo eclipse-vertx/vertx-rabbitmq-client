@@ -58,8 +58,6 @@ public class RabbitMQClientDisconnectTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = true;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = true;
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMQClientDisconnectTest.class);
-
   private final Network network;
   private final GenericContainer networkedRabbitmq;
   private Proxy proxy;
@@ -78,7 +76,7 @@ public class RabbitMQClientDisconnectTest {
   private RabbitMQConsumer consumer;
   
   public RabbitMQClientDisconnectTest() throws IOException {
-    LOGGER.info("Constructing");
+    logger.info("Constructing");
     this.network = RabbitMQBrokerProvider.getNetwork();
     this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));

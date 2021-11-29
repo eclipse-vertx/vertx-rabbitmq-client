@@ -62,8 +62,6 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
-
   private final Network network;
   private final GenericContainer networkedRabbitmq;
   private Proxy proxy;
@@ -85,7 +83,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private RabbitMQConsumer consumer;
   
   public RabbitMQClientBuiltinRecoveryTest() throws IOException {
-    LOGGER.info("Constructing");
+    logger.info("Constructing");
     this.network = RabbitMQBrokerProvider.getNetwork();
     this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
