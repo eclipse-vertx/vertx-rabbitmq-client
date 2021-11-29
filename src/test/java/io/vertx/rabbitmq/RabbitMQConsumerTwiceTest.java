@@ -42,8 +42,8 @@ public class RabbitMQConsumerTwiceTest {
   /**
    * This test verifies that the RabbitMQConsumer cannot be used twice on the same channel.
    */
-  private static final String TEST_EXCHANGE = "RabbitMQConsumerTwiceTestExchange";
-  private static final String TEST_QUEUE = "RabbitMQConsumerTwiceTestQueue";
+  private final String TEST_EXCHANGE = this.getClass().getName() + "Exchange";
+  private final String TEST_QUEUE = this.getClass().getName() + "Queue";
   private static final boolean DEFAULT_RABBITMQ_EXCHANGE_DURABLE = false;
   private static final boolean DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE = true;
   private static final BuiltinExchangeType DEFAULT_RABBITMQ_EXCHANGE_TYPE = BuiltinExchangeType.FANOUT;
@@ -74,8 +74,8 @@ public class RabbitMQConsumerTwiceTest {
 
     options.setHost("localhost");
     options.setPort(networkedRabbitmq.getMappedPort(5672));
-    options.setConnectionTimeout(1000);
-    options.setNetworkRecoveryInterval(1000);
+    options.setConnectionTimeout(500);
+    options.setNetworkRecoveryInterval(500);
     options.setRequestedHeartbeat(1);
     options.setConnectionName(this.getClass().getSimpleName());
     // Disable Java RabbitMQ client library reconnections

@@ -55,8 +55,8 @@ public class RabbitMQClientReconnectTest {
    * interrupting the java client reconnection logic, even though the vertx reconnection won't work because retries is zero.
    *
    */
-  private static final String TEST_EXCHANGE = "RabbitMQClientBuiltinReconnectExchange";
-  private static final String TEST_QUEUE = "RabbitMQClientBuiltinReconnectQueue";
+  private final String TEST_EXCHANGE = this.getClass().getName() + "Exchange";
+  private final String TEST_QUEUE = this.getClass().getName() + "Queue";
   private static final boolean DEFAULT_RABBITMQ_EXCHANGE_DURABLE = true;
   private static final boolean DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE = false;
   private static final BuiltinExchangeType DEFAULT_RABBITMQ_EXCHANGE_TYPE = BuiltinExchangeType.FANOUT;
@@ -98,8 +98,8 @@ public class RabbitMQClientReconnectTest {
 
     options.setHost("localhost");
     options.setPort(proxy.getProxyPort());
-    options.setConnectionTimeout(1000);
-    options.setNetworkRecoveryInterval(1000);
+    options.setConnectionTimeout(500);
+    options.setNetworkRecoveryInterval(500);
     options.setRequestedHeartbeat(1);
     options.setConnectionName(this.getClass().getSimpleName());
     // Disable Java RabbitMQ client library reconnections
