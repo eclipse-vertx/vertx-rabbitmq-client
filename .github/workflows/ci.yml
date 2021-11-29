@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - initial-work
       - '[0-9]+.[0-9]+'
   pull_request:
     branches:
@@ -16,7 +17,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        jdk: [8, 11]
+        jdk: [8, 11, 17]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -29,7 +30,7 @@ jobs:
         run: mvn -q clean verify -B
   Deploy:
     name: Deploy to OSSRH
-    if: ${{ github.repository_owner == 'eclipse-vertx' && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    if: ${{ github.repository_owner == 'eclipse-vertx' && (github.ref != 'refs/heads/initial-work') && (github.event_name == 'push' || github.event_name == 'schedule') }}
     needs: Test
     runs-on: ubuntu-latest
     env:
