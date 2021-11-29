@@ -49,7 +49,7 @@ public class RepublishingPublisher2 implements RabbitMQPublisherStresser {
   
   @Override
   public String getName() {
-    return "Reliable publisher";
+    return "Reliable publisher using Futures";
   }
 
   @Override

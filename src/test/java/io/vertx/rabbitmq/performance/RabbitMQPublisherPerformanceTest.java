@@ -156,10 +156,10 @@ public class RabbitMQPublisherPerformanceTest {
     
     List<RabbitMQPublisherStresser> tests = Arrays.asList(
             new FireAndForget(connection)
-//            , new WaitOnEachMessage(connection)
-//            , new WaitEveryNMessages(connection, 10)
-//            , new WaitEveryNMessages(connection, 100)
-//            , new WaitEveryNMessages(connection, 1000)
+            , new WaitOnEachMessage(connection)
+            , new WaitEveryNMessages(connection, 10)
+            , new WaitEveryNMessages(connection, 100)
+            , new WaitEveryNMessages(connection, 1000)
             , new FuturePublisher(connection)
             , new RepublishingPublisher(connection)
             , new RepublishingPublisher2(testRunContext.vertx(), connection)
