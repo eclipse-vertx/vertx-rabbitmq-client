@@ -17,6 +17,7 @@ package io.vertx.rabbitmq;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.BuiltinExchangeType;
+import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.ConfirmCallback;
 import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.ShutdownSignalException;
@@ -78,10 +79,11 @@ public interface RabbitMQChannel {
    * Callbacks can be used for any kind of resetting that clients need to perform after the automatic recovery is complete.
    * 
    * Callbacks will be called on a RabbitMQ thread, after topology recovery, and will block the completion of the recovery.
+   * Because these callbacks have no interaction with Vertx this is one of the few methods that exposes the raw channel.
    * 
    * @param channelRecoveryCallback 
    */
-  void addChannelRecoveryCallback(Handler<RabbitMQChannel> channelRecoveryCallback);
+  void addChannelRecoveryCallback(Handler<Channel> channelRecoveryCallback);
   
   void addChannelShutdownHandler(Handler<ShutdownSignalException> handler);
   

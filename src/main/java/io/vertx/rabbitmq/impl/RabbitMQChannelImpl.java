@@ -59,7 +59,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   
   private volatile String channelId;
   
-  private final List<Handler<RabbitMQChannel>> channelRecoveryCallbacks = new ArrayList<>();
+  private final List<Handler<Channel>> channelRecoveryCallbacks = new ArrayList<>();
   private final List<Handler<ShutdownSignalException>> shutdownHandlers = new ArrayList<>();
   private final Object publishLock = new Object();
   private long knownConnectionInstance;
@@ -82,7 +82,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
   
   @Override
-  public void addChannelRecoveryCallback(Handler<RabbitMQChannel> channelRecoveryCallback) {
+  public void addChannelRecoveryCallback(Handler<Channel> channelRecoveryCallback) {
     synchronized(channelRecoveryCallbacks) {
       channelRecoveryCallbacks.add(channelRecoveryCallback);
     }
@@ -168,17 +168,16 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
                       
                       if (channel instanceof Recoverable) {
                         Recoverable recoverable = (Recoverable) channel;
-                        RabbitMQChannel outerChannel = this;
                         recoverable.addRecoveryListener(new RecoveryListener() {
                           @Override
                           public void handleRecovery(Recoverable recoverable) {
                             log.info("Channel {} recovered", recoverable);
-                            List<Handler<RabbitMQChannel>> callbacks;
+                            List<Handler<Channel>> callbacks;
                             synchronized(channelRecoveryCallbacks) {
                               callbacks = new ArrayList<>(channelRecoveryCallbacks);
                             } 
-                            for (Handler<RabbitMQChannel> handler : callbacks) {
-                              handler.handle(outerChannel);
+                            for (Handler<Channel> handler : callbacks) {
+                              handler.handle(channel);
                             }
                           }
 
@@ -215,12 +214,12 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     return createLock.create(promise -> {
       connect(promise);
     }, channel -> {
-      return context.executeBlocking(future -> {
+      return context.executeBlocking(promise -> {
         try {
           T t = handler.handle(channel);
-          future.complete(t);
+          promise.complete(t);
         } catch (Throwable t) {
-          future.fail(t);
+          promise.fail(t);
         }
       });
     });

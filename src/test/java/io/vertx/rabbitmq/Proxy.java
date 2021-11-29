@@ -24,12 +24,17 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
  * @author jtalbut
  */
 public class Proxy {
+  
+  @SuppressWarnings("constantname")
+  private static final Logger logger = LoggerFactory.getLogger(Proxy.class);
   
   private final Vertx vertx;
   private final int srcPort;
@@ -68,24 +73,35 @@ public class Proxy {
 
     proxyServer = vertx.createNetServer().connectHandler(serverSocket -> {
       serverSocket.pause();
+      logger.warn("Proxy server connected: {} -> {}", serverSocket.remoteAddress(), serverSocket.localAddress());
       proxyClient.connect(dstPort, "localhost", ar -> {
         if (ar.succeeded()) {
           NetSocket clientSocket = ar.result();
+          logger.warn("Proxy client connected: {} -> {}", clientSocket.localAddress(), clientSocket.remoteAddress());
           serverSocket.handler(clientSocket::write);
-          serverSocket.exceptionHandler(err -> serverSocket.close());
+          serverSocket.exceptionHandler(err -> {
+            logger.warn("Proxy server exception: ", err);
+            serverSocket.close();
+          });
           serverSocket.closeHandler(v -> clientSocket.close());
           clientSocket.handler(serverSocket::write);
-          clientSocket.exceptionHandler(err -> clientSocket.close());
+          clientSocket.exceptionHandler(err -> {
+            logger.warn("Proxy client exception: ", err);
+            clientSocket.close();
+          });
           clientSocket.closeHandler(v -> serverSocket.close());
           serverSocket.resume();
         } else {
+          logger.warn("Proxy client not connected: {}", ar.cause());
           serverSocket.close();;
         }
       });
     }).listen(srcPort, "localhost", ar -> {
       if (ar.succeeded()) {
+        logger.warn("Proxy started from {} to {}", srcPort, dstPort);
         latch.complete(null);
       } else {
+        logger.warn("Proxy failed from {} to {}: ", srcPort, dstPort, ar.cause());
         latch.completeExceptionally(ar.cause());
       }
     });

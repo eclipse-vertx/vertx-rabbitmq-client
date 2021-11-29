@@ -16,8 +16,12 @@
 package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.AMQP.BasicProperties;
+import com.rabbitmq.client.Channel;
+import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -28,6 +32,7 @@ import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,10 +41,10 @@ import org.slf4j.LoggerFactory;
  *
  * @author jtalbut
  */
-public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
+public class RabbitMQRepublishingPublisherImpl2 implements RabbitMQFuturePublisher {
   
-  private static final Logger log = LoggerFactory.getLogger(RabbitMQFuturePublisherImpl.class);
-
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQRepublishingPublisherImpl2.class);
+  
   private final Vertx vertx;
   private final RabbitMQChannel channel;
   private final String exchange;
@@ -47,22 +52,40 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
   private final RabbitMQPublisherOptions options;
 
   private String lastChannelId = null;
-  //private static IndexedQueue<TaggedPromise> promises = new IndexedQueue<>();
-  private final Deque<TaggedPromise> promises = new ArrayDeque<>();
-    
-  private static class TaggedPromise {
-    final long deliveryTag;
-    final Promise<Void> promise;
 
-    TaggedPromise(long deliveryTag, Promise<Void> promise) {
-      this.deliveryTag = deliveryTag;
+  private final Deque<MessageDetails> promises = new ArrayDeque<>();
+  private final Deque<MessageDetails> resendQueue = new ArrayDeque<>();
+    
+  /**
+   * POD for holding message details pending acknowledgement.
+   * @param <I> The type of the message IDs.
+   */
+  static class MessageDetails {
+
+    private final Promise<Void> promise;
+    private final String exchange;
+    private final String routingKey;
+    private final BasicProperties properties;
+    private final byte[] message;
+    private final Handler<AsyncResult<Void>> publishHandler;
+    private final String channelId;
+    private final long deliveryTag;
+
+    MessageDetails(Promise<Void> promise, String exchange, String routingKey, BasicProperties properties, byte[] message, String channelId, long deliveryTag, Handler<AsyncResult<Void>> publishHandler) {
       this.promise = promise;
-    }    
+      this.exchange = exchange;
+      this.routingKey = routingKey;
+      this.properties = properties;
+      this.message = message;
+      this.publishHandler = publishHandler;
+      this.channelId = channelId;
+      this.deliveryTag = deliveryTag;
+    }
 
     @Override
     public int hashCode() {
-      int hash = 5;
-      hash = 71 * hash + (int) (this.deliveryTag ^ (this.deliveryTag >>> 32));
+      int hash = 7;
+      hash = 67 * hash + (int) (this.deliveryTag ^ (this.deliveryTag >>> 32));
       return hash;
     }
 
@@ -77,16 +100,17 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
       if (getClass() != obj.getClass()) {
         return false;
       }
-      final TaggedPromise other = (TaggedPromise) obj;
+      final MessageDetails other = (MessageDetails) obj;
       if (this.deliveryTag != other.deliveryTag) {
         return false;
       }
       return true;
     }
-        
+    
+    
   }
   
-  public RabbitMQFuturePublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options) {
+  public RabbitMQRepublishingPublisherImpl2(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options) {
     this.vertx = vertx;
     this.channel = channel;
     this.exchange = exchange;
@@ -98,27 +122,64 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
                 if (ar.succeeded()) {
                   if (lastChannelId == null) {
                     lastChannelId = channel.getChannelId();
+                    p.complete();
                   } else if (!lastChannelId.equals(channel.getChannelId())) {
-                    lastChannelId = channel.getChannelId();
-                    List<TaggedPromise> failedPromises = copyPromises();
-                    failedPromises.forEach(tp -> tp.promise.fail("Channel reconnected"));
+                    List<MessageDetails> messagesToResend = copyPromises();
+                    resendQueue.addAll(messagesToResend);
+                    doResendAsync(p, messagesToResend.iterator());
+                  } else {
+                    p.complete();
                   }
-                  p.complete();
                 } else {
                   p.fail(ar.cause());
                 }
       });
     });
-    this.channel.addChannelRecoveryCallback(c -> {
-      context.runOnContext(v -> {
-        List<TaggedPromise> failedFutures = copyPromises();
-        promises.forEach(tp -> tp.promise.fail("Channel reconnected"));
+    this.channel.addChannelRecoveryCallback(this::channelRecoveryCallback);
+  }
+  
+  private void doResendAsync(Promise<Void> promise, Iterator<MessageDetails> iter) {
+    if (iter.hasNext()) {
+      MessageDetails md = iter.next();
+      Promise<Void> publishPromise = md.promise;
+      channel.basicPublish(exchange, md.routingKey, false, md.properties, md.message, deliveryTag -> {
+        synchronized(promises) {
+          promises.addLast(new MessageDetails(publishPromise, exchange, md.routingKey, md.properties, md.message, md.channelId, md.deliveryTag, null));
+        }
+      }).onFailure(ex -> {
+        publishPromise.fail(ex);
+      }).onComplete(ar -> {
+        doResendAsync(promise, iter);
       });
-    });
+    } else {
+      promise.complete();
+    }
+  }
+  
+  // This is called on a RabbitMQ thread and does not involve Vertx
+  // The result is rather unpleasant, but is a necessary thing when faced with Java client recoveries.
+  private void channelRecoveryCallback(Channel rawChannel) {
+    boolean done = false;
+    while (!done) {
+      MessageDetails md;
+      synchronized(promises) {
+        md = this.resendQueue.pollFirst();
+      }
+      if (md == null) {
+        done = true;
+      } else {
+        long deliveryTag = rawChannel.getNextPublishSeqNo();
+        channel.basicPublish(exchange, md.routingKey, true, md.properties, md.message);
+        MessageDetails md2 = new MessageDetails(md.promise, exchange, md.routingKey, md.properties, md.message, md.channelId, md.deliveryTag, null);
+        synchronized(promises) {
+          promises.addLast(md2);
+        }
+      }
+    }
   }
 
-  private List<TaggedPromise> copyPromises() {
-    List<TaggedPromise> failedPromises;
+  private List<MessageDetails> copyPromises() {
+    List<MessageDetails> failedPromises;
     synchronized(promises) {
       failedPromises = new ArrayList<>(promises);
       promises.clear();
@@ -146,15 +207,15 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
         log.error("Confirmation received whilst there are no pending promises!");
         return ;
       }
-      TaggedPromise head = promises.getFirst();
+      MessageDetails head = promises.getFirst();
       if (rawConfirmation.isMultiple() || (head.deliveryTag == rawConfirmation.getDeliveryTag())) {
         while(!promises.isEmpty() && promises.getFirst().deliveryTag  <= rawConfirmation.getDeliveryTag()) {
-          TaggedPromise tp = promises.removeFirst();
+          MessageDetails tp = promises.removeFirst();
           completePromise(tp.promise, rawConfirmation);
         }
       } else {
         log.warn("Searching for promise for {} where leading promise has {}", rawConfirmation.getDeliveryTag(), promises.getFirst().deliveryTag);
-        for (TaggedPromise tp : promises) {
+        for (MessageDetails tp : promises) {
           if (tp.deliveryTag == rawConfirmation.getDeliveryTag()) {
             completePromise(tp.promise, rawConfirmation);
             promises.remove(tp);
@@ -185,18 +246,19 @@ public class RabbitMQFuturePublisherImpl implements RabbitMQFuturePublisher {
     Promise<Void> promise = Promise.promise();
     channel.basicPublish(exchange, routingKey, false, properties, body, deliveryTag -> {
       synchronized(promises) {
-        promises.addLast(new TaggedPromise(deliveryTag, promise));
+        promises.addLast(new MessageDetails(promise, exchange, routingKey, properties, body, channel.getChannelId(), deliveryTag, promise));
       }
     }).onFailure(ex -> {
       promise.fail(ex);
     });
     return promise.future();
   }
-
+  
   @Override
   public Future<Void> stop() {
     synchronized(promises) {
       promises.clear();
+      resendQueue.clear();
     }
     return Future.succeededFuture();
   }

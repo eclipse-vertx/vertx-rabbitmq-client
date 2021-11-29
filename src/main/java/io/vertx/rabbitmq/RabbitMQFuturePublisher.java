@@ -50,4 +50,13 @@ public interface RabbitMQFuturePublisher {
   @GenIgnore(GenIgnore.PERMITTED_TYPE)
   Future<Void> publish(String routingKey, AMQP.BasicProperties properties, byte[] body);
 
+  /**
+   * Prevent any future asynchronous behaviour.
+   * Any deliveries that are pending confirmations will be discarded and no attempt will be made to resend any messages.
+   * Note that this does not disable any confirmations coming from RabbitMQ and it is not necessary to restart the publisher to send messages again.
+   * If confirmations are received from RabbitMQ for deliveries that have been discarded they will be logged, but otherwise not do anything.
+   * @return A Future that will be completed when the publisher has stopped.
+   */
+  Future<Void> stop();
+  
 }

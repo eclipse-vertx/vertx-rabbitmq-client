@@ -350,7 +350,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     }        
   }
   
-  private void connectBlocking(Promise<Connection> promise) {
+  private Future<Connection> connectBlocking(Promise<Connection> promise) {
     try {
       synchronized(connectionLock) {
         if (connection == null || !connection.isOpen()) {
@@ -362,11 +362,20 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     } catch(Throwable ex) {
       logger.error("Failed to create connection: ", ex);
       if (shouldRetryConnection()) {
-        vertx.setTimer(config.getReconnectInterval(), time -> connectBlocking(promise));
+        vertx.setTimer(config.getReconnectInterval(), time -> {
+          vertx.executeBlocking(p -> connectBlocking(promise).onComplete(ar -> {
+            if (ar.succeeded()) {
+              p.complete();
+            } else {
+              p.fail(ar.cause());
+            }
+          }));
+        });
       } else {
         promise.fail(ex);
       }
     }
+    return promise.future();
   }  
   
   public Future<Channel> openChannel(long lastInstance) {
@@ -381,7 +390,13 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
         }
         Promise<Connection> connectingPromise = Promise.promise();
         connectingFuture = connectingPromise.future();
-        context.executeBlocking(execPromise -> connectBlocking(connectingPromise));
+        context.executeBlocking(execPromise -> connectBlocking(connectingPromise).onComplete(ar -> {
+          if (ar.succeeded()) {
+            execPromise.complete();
+          } else {
+            execPromise.fail(ar.cause());
+          }
+        }));
       }
       return connectingFuture
               .compose(conn -> {
