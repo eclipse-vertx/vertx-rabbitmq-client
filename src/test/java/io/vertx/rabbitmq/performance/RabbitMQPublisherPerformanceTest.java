@@ -24,6 +24,7 @@ import io.vertx.core.Future;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.RunTestOnContext;
+import io.vertx.ext.unit.junit.Timeout;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import io.vertx.rabbitmq.RabbitMQBrokerProvider;
 import io.vertx.rabbitmq.RabbitMQChannel;
@@ -70,6 +71,9 @@ public class RabbitMQPublisherPerformanceTest {
   
   @Rule
   public RunTestOnContext testRunContext = new RunTestOnContext();
+  
+  @Rule
+  public Timeout timeoutRule = Timeout.seconds(3600);
   
   private static class Result {
     private final String name;
@@ -151,8 +155,8 @@ public class RabbitMQPublisherPerformanceTest {
     RabbitMQChannel channel = connection.createChannel();
     Async async = context.async();
     
-    String exchange = "testPerformance";
-    String queue = "testPerformanceQueue";
+    String exchange = this.getClass().getName() + "Exchange";
+    String queue = this.getClass().getName() + "Queue";
     
     List<RabbitMQPublisherStresser> tests = Arrays.asList(
             new FireAndForget(connection)
@@ -160,6 +164,8 @@ public class RabbitMQPublisherPerformanceTest {
             , new WaitEveryNMessages(connection, 10)
             , new WaitEveryNMessages(connection, 100)
             , new WaitEveryNMessages(connection, 1000)
+            , new FuturePublisherWithRetries(testRunContext.vertx(), connection)
+            , new FuturePublisherWithoutRetries(testRunContext.vertx(), connection)
             , new FuturePublisher(connection)
             , new RepublishingPublisher(connection)
             , new RepublishingPublisher2(testRunContext.vertx(), connection)
@@ -215,7 +221,7 @@ public class RabbitMQPublisherPerformanceTest {
                           long duration = end - start;
                           results.add(new Result(test.getName(), duration));
                           double seconds = duration / 1000.0;
-                          logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, ITERATIONS / seconds);
+                          logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, (int) (ITERATIONS / seconds));
                           return test.shutdown();
                         });
               })
