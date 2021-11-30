@@ -41,28 +41,28 @@ public class FuturePublisherWithRetries implements RabbitMQPublisherStresser {
   
   private final Vertx vertx;
   private final RabbitMQChannel channel;
-  private String exchange;
   private RabbitMQFuturePublisher publisher;
+  private final boolean withRetries;
 
-  public FuturePublisherWithRetries(Vertx vertx, RabbitMQConnection connection) {
+  public FuturePublisherWithRetries(Vertx vertx, RabbitMQConnection connection, boolean withRetries) {
     this.vertx = vertx;
     this.channel = connection.createChannel();
+    this.withRetries = withRetries;
   }
   
   @Override
   public String getName() {
-    return "Future publisher 2 with retries";
+    return "Future publisher 2 " + (withRetries ? "with" : "without") + " retries";
   }
 
   @Override
   public Future<Void> init(String exchange) {
-    this.exchange = exchange;
     channel.addChannelEstablishedCallback(promise -> {
       channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
               .onComplete(promise)
               ;
     });
-    publisher = new RabbitMQFuturePublisherImpl2(vertx, channel, exchange, new RabbitMQPublisherOptions().setMaxInternalQueueSize(1000000), true);
+    publisher = new RabbitMQFuturePublisherImpl2(vertx, channel, exchange, new RabbitMQPublisherOptions().setMaxInternalQueueSize(1000000), withRetries);
     return Future.succeededFuture();
   }
   
