@@ -214,18 +214,20 @@ public class RabbitMQPublisherPerformanceTest {
     return testRunContext.vertx().executeBlocking(promise -> {
       test.runTest(WARMUP_ITERATIONS)
               .compose(v -> {
-                long start = System.currentTimeMillis();
-                return test.runTest(ITERATIONS)
-                        .compose(v2 -> {
-                          long end = System.currentTimeMillis();
-                          long duration = end - start;
-                          results.add(new Result(test.getName(), duration));
-                          double seconds = duration / 1000.0;
-                          logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, (int) (ITERATIONS / seconds));
-                          return test.shutdown();
-                        });
-              })
-              .onComplete(promise);
+                return testRunContext.vertx().<Void>executeBlocking(promise2 -> {
+                  long start = System.currentTimeMillis();
+                  test.runTest(ITERATIONS)
+                          .compose(v2 -> {
+                            long end = System.currentTimeMillis();
+                            long duration = end - start;
+                            results.add(new Result(test.getName(), duration));
+                            double seconds = duration / 1000.0;
+                            logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, (int) (ITERATIONS / seconds));
+                            return test.shutdown();
+                          })
+                          .onComplete(promise2);
+                }).onComplete(promise);
+              });
     });
    
   }

@@ -18,6 +18,7 @@ package io.vertx.rabbitmq.impl;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Address;
 import com.rabbitmq.client.AlreadyClosedException;
+import com.rabbitmq.client.BlockedListener;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -272,6 +273,17 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
             , URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
     );      
     conn.addShutdownListener(this);
+    conn.addBlockedListener(new BlockedListener() {
+      @Override
+      public void handleBlocked(String string) throws IOException {
+        logger.info("Blocked: {}", string);
+      }
+
+      @Override
+      public void handleUnblocked() throws IOException {
+        logger.info("Unblocked");
+      }
+    });
     
     return conn;
   }

@@ -37,13 +37,13 @@ import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQRepublishingPublisher;
+import java.io.IOException;
 
 /**
  *
@@ -67,6 +67,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   private volatile boolean closed;
   private volatile boolean confirmSelected;
   private final CreateLock<Channel> createLock = new CreateLock<>(c -> c.isOpen());
+  
 
 
   public RabbitMQChannelImpl(Vertx vertx, RabbitMQConnectionImpl connection, RabbitMQOptions options) {

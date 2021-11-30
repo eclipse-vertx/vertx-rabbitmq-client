@@ -210,6 +210,7 @@ public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
   }
   
   private void handleConfirmation(RabbitMQConfirmation rawConfirmation) {
+    List<TaggedPromise> toComplete = new ArrayList<>();
     synchronized(promises) {
       if (promises.isEmpty()) {
         log.error("Confirmation received whilst there are no pending promises!");
@@ -219,18 +220,21 @@ public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
       if (rawConfirmation.isMultiple() || (head.deliveryTag == rawConfirmation.getDeliveryTag())) {
         while(!promises.isEmpty() && promises.getFirst().deliveryTag  <= rawConfirmation.getDeliveryTag()) {
           TaggedPromise tp = promises.removeFirst();
-          completePromise(tp.promise, rawConfirmation);
+          toComplete.add(tp);
         }
       } else {
         log.warn("Searching for promise for {} where leading promise has {}", rawConfirmation.getDeliveryTag(), promises.getFirst().deliveryTag);
         for (TaggedPromise tp : promises) {
           if (tp.deliveryTag == rawConfirmation.getDeliveryTag()) {
-            completePromise(tp.promise, rawConfirmation);
+            toComplete.add(tp);
             promises.remove(tp);
             break ;
           }
         }
       }
+    }
+    for (TaggedPromise tp : toComplete) {
+      completePromise(tp.promise, rawConfirmation);
     }
   }
 
