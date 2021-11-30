@@ -168,17 +168,7 @@ public class RabbitMQRepublishingPublisherImpl implements RabbitMQRepublishingPu
   }
 
   protected final Future<Void> addConfirmListener() {
-    return channel.addConfirmListener(options.getMaxInternalQueueSize())
-            .onComplete(ar -> {
-              if (ar.succeeded()) {
-                ar.result().handler(confirmation -> {
-                  handleConfirmation(confirmation);
-                });
-              } else {
-                log.error("Failed to add confirmListener: ", ar.cause());
-              }
-            })
-            .mapEmpty();
+    return channel.addConfirmHandler(confirmation -> handleConfirmation(confirmation));
   }
 
   @Override

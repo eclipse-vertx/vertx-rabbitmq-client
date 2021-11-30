@@ -25,7 +25,6 @@ import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
-import io.vertx.core.streams.ReadStream;
 import java.util.Map;
 
 /**
@@ -112,7 +111,7 @@ public interface RabbitMQChannel {
    */
   RabbitMQConsumer createConsumer(String queue, RabbitMQConsumerOptions options);
   
-  Future<ReadStream<RabbitMQConfirmation>> addConfirmListener(int maxQueueSize);
+  Future<Void> addConfirmHandler(Handler<RabbitMQConfirmation> confirmListener);
   
   /**
    * Returns an identifier of the underlying channel.

@@ -19,8 +19,6 @@ import com.rabbitmq.client.ConfirmListener;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.core.Context;
 import io.vertx.core.Handler;
-import io.vertx.core.streams.ReadStream;
-import io.vertx.core.streams.impl.InboundBuffer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import java.io.IOException;
 import org.slf4j.Logger;
@@ -30,18 +28,15 @@ import org.slf4j.LoggerFactory;
  *
  * @author jtalbut
  */
-public class RabbitMQConfirmListenerImpl implements ConfirmListener, ReadStream<RabbitMQConfirmation> {
+public class RabbitMQConfirmListenerImpl implements ConfirmListener {
 
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQConfirmListenerImpl.class);
   
   private final Context handlerContext;
   private final RabbitMQChannel channel;
-  private final InboundBuffer<RabbitMQConfirmation> pending;
-  private final int maxQueueSize;
+  private final Handler<RabbitMQConfirmation> handler;
 
-  private Handler<Throwable> exceptionHandler;  
-  
   @Override
   public void handleAck(long deliveryTag, boolean multiple) throws IOException {
     this.handlerContext.runOnContext(v -> handleAck(deliveryTag, multiple, true));
@@ -52,72 +47,14 @@ public class RabbitMQConfirmListenerImpl implements ConfirmListener, ReadStream<
     this.handlerContext.runOnContext(v -> handleAck(deliveryTag, multiple, false));
   }
   
-  public RabbitMQConfirmListenerImpl(RabbitMQChannel channel, Context context, int maxQueueSize) {
+  public RabbitMQConfirmListenerImpl(RabbitMQChannel channel, Context context, Handler<RabbitMQConfirmation> handler) {
     this.handlerContext = context;
     this.channel = channel;
-    this.maxQueueSize = maxQueueSize;
-    this.pending = new InboundBuffer<>(context, maxQueueSize);
+    this.handler = handler;
   }
 
   void handleAck(long deliveryTag, boolean multiple, boolean succeeded) {
-    if (pending.size() >= maxQueueSize) {
-      pending.read();
-    }
-    pending.write(new RabbitMQConfirmation(channel.getChannelId(), deliveryTag, multiple, succeeded));
+    this.handler.handle(new RabbitMQConfirmation(channel.getChannelId(), deliveryTag, multiple, succeeded));
   }  
 
-  @Override
-  public RabbitMQConfirmListenerImpl exceptionHandler(Handler<Throwable> exceptionHandler) {
-    this.exceptionHandler = exceptionHandler;
-    return this;
-  }
-  
-  @Override
-  public RabbitMQConfirmListenerImpl handler(Handler<RabbitMQConfirmation> handler) {
-    if (handler != null) {
-      pending.handler(msg -> {
-        try {
-          handler.handle(msg);
-        } catch (Exception e) {
-          handleException(e);
-        }
-      });
-    } else {
-      pending.handler(null);
-    }
-    return this;
-  }
-
-  /**
-   * Trigger exception handler with given exception
-   */
-  private void handleException(Throwable exception) {
-    if (exceptionHandler != null) {
-      exceptionHandler.handle(exception);
-    }
-  }
-  
-  @Override
-  public RabbitMQConfirmListenerImpl pause() {
-    pending.pause();
-    return this;
-  }
-
-  @Override
-  public RabbitMQConfirmListenerImpl resume() {
-    pending.resume();
-    return this;
-  }
-
-  @Override
-  public RabbitMQConfirmListenerImpl fetch(long amount) {
-    pending.fetch(amount);
-    return this;
-  }
-
-  @Override
-  public RabbitMQConfirmListenerImpl endHandler(Handler<Void> hndlr) {
-    return this;
-  }
-  
 }

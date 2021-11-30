@@ -29,7 +29,6 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.streams.ReadStream;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
@@ -113,18 +112,17 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public Future<ReadStream<RabbitMQConfirmation>> addConfirmListener(int maxQueueSize) {
-
+  public Future<Void> addConfirmHandler(Handler<RabbitMQConfirmation> confirmHandler) {
     return onChannel(channel -> {
 
-      RabbitMQConfirmListenerImpl listener = new RabbitMQConfirmListenerImpl(this, vertx.getOrCreateContext(), maxQueueSize);
+      RabbitMQConfirmListenerImpl listener = new RabbitMQConfirmListenerImpl(this, vertx.getOrCreateContext(), confirmHandler);
       channel.addConfirmListener(listener);
       channel.confirmSelect();
 
-      return listener;
+      return null;
     });
   }
-  
+    
   @Override
   public Future<Void> confirmSelect() {
 

@@ -125,7 +125,7 @@ public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
     this.resendOnReconnect = resendOnReconnect;
     this.context = vertx.getOrCreateContext();
     this.channel.addChannelEstablishedCallback(p -> {
-      addConfirmListener(options.getMaxInternalQueueSize())
+      addConfirmListener()
               .onComplete(ar -> {                
                 if (ar.succeeded()) {
                   if (lastChannelId == null) {
@@ -195,18 +195,8 @@ public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
     return failedPromises;
   }
   
-  protected final Future<Void> addConfirmListener(int maxQueueSize) {
-    return channel.addConfirmListener(maxQueueSize)
-            .onComplete(ar -> {
-              if (ar.succeeded()) {
-                ar.result().handler(confirmation -> {
-                  handleConfirmation(confirmation);
-                });
-              } else {
-                log.error("Failed to add confirmListener: ", ar.cause());
-              }
-            })
-            .mapEmpty();
+  protected final Future<Void> addConfirmListener() {
+    return channel.addConfirmHandler(confirmation -> handleConfirmation(confirmation));
   }
   
   private void handleConfirmation(RabbitMQConfirmation rawConfirmation) {
