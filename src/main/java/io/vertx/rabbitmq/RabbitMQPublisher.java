@@ -24,7 +24,7 @@ import io.vertx.core.buffer.Buffer;
  *
  * @author jtalbut
  */
-public interface RabbitMQFuturePublisher {
+public interface RabbitMQPublisher {
   
   /**
    * Publish a message. 

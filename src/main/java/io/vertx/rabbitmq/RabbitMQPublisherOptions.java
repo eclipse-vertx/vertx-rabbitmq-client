@@ -30,21 +30,9 @@ public class RabbitMQPublisherOptions {
   /**
    * The default connection retry delay = {@code 10000}
    */
-  public static final long DEFAULT_RECONNECT_INTERVAL = 1000L;
+  public static final boolean DEFAULT_RESEND_ON_RECONNECT = false;
 
-  /**
-   * The default connection retries = {@code Integer.MAX_VALUE}
-   */
-  public static final Integer DEFAULT_RECONNECT_ATTEMPTS = Integer.MAX_VALUE;
-
-  /**
-   * The default internal queue size = {@code Integer.MAX_VALUE}
-   */
-  private static final int DEFAULT_QUEUE_SIZE = Integer.MAX_VALUE;
-  
-  private Integer reconnectAttempts = 	DEFAULT_RECONNECT_ATTEMPTS;
-  private long reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
-  private int maxInternalQueueSize = DEFAULT_QUEUE_SIZE;
+  private boolean resendOnReconnect = DEFAULT_RESEND_ON_RECONNECT;
 
   
   public RabbitMQPublisherOptions() {
@@ -56,9 +44,7 @@ public class RabbitMQPublisherOptions {
   }
 
   public RabbitMQPublisherOptions(RabbitMQPublisherOptions that) {
-    reconnectAttempts = that.reconnectAttempts;
-    reconnectInterval = that.reconnectInterval;
-    maxInternalQueueSize = that.maxInternalQueueSize;
+    resendOnReconnect = that.resendOnReconnect;
   }
 
   public JsonObject toJson() {
@@ -66,57 +52,24 @@ public class RabbitMQPublisherOptions {
     RabbitMQPublisherOptionsConverter.toJson(this, json);
     return json;
   }
-  
+
   /**
-   * @return the number of reconnect attempts
+   * If set to true the Publisher will retain messages and will attempt to resent them if the underlying connection to the RabbitMQ server is remade.
+   * @return Whether or not resending unconfirmed messages when the channel reconnects is enabled.
    */
-  public Integer getReconnectAttempts() {
-    return reconnectAttempts;
+  public boolean isResendOnReconnect() {
+    return resendOnReconnect;
   }
 
   /**
-   * Set the number of reconnect attempts to attempt when connecting, the {@code null} value disables it.
-   *
-   * @param reconnectAttempts the number of retries
-   * @return a reference to this, so the API can be used fluently
+   * If set to true the Publisher will retain messages and will attempt to resent them if the underlying connection to the RabbitMQ server is remade.
+   * @param resendOnReconnect Whether or not resending unconfirmed messages when the channel reconnects is enabled.
+   * @return this so that the method can be used in a fluent manner.
    */
-  public RabbitMQPublisherOptions setReconnectAttempts(Integer reconnectAttempts) {
-    this.reconnectAttempts = reconnectAttempts;
-    return this;
-  }
-
-  /**
-   * @return the delay in milliseconds between connection retries
-   */
-  public long getReconnectInterval() {
-    return reconnectInterval;
-  }
-
-  /**
-   * Set the delay in milliseconds between connection retries.
-   *
-   * @param reconnectInterval the delay in milliseconds
-   * @return a reference to this, so the API can be used fluently
-   */
-  public RabbitMQPublisherOptions setReconnectInterval(long reconnectInterval) {
-    this.reconnectInterval = reconnectInterval;
-    return this;
-  }
-
-  /**
-   * @return the size of internal queue
-   */
-  public int getMaxInternalQueueSize() {
-    return maxInternalQueueSize;
-  }
-  
-  /**
-   * @param maxInternalQueueSize the size of internal queue
-   * @return a reference to this, so the API can be used fluently
-   */
-  public RabbitMQPublisherOptions setMaxInternalQueueSize(int maxInternalQueueSize) {
-    this.maxInternalQueueSize = maxInternalQueueSize;
+  public RabbitMQPublisherOptions setResendOnReconnect(boolean resendOnReconnect) {
+    this.resendOnReconnect = resendOnReconnect;
     return this;
   }
   
+
 }

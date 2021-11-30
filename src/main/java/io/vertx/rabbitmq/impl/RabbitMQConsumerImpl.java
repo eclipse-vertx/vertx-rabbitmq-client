@@ -95,7 +95,7 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
 
     @Override
     public void handleShutdownSignal(String tag, ShutdownSignalException sig) {    
-      log.info("handleShutdownSignal " +tag);
+      log.info("handleShutdownSignal " + tag);
       if ((reconnectInterval > 0) && !cancelled) {
         long count = consumeCount.incrementAndGet();
         log.debug("consume count: " + count);        
@@ -121,7 +121,7 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
             .onSuccess(consumerTag -> promise.complete(consumerTag))
             .onFailure(ex -> {
               if (reconnectInterval > 0 && ! cancelled) {
-                log.debug("Failed to consume, will try again");
+                log.debug("Failed to consume, will try again after " + reconnectInterval + "ms");
                 vertx.setTimer(reconnectInterval, (id) -> {
                   consume(promise);
                 });

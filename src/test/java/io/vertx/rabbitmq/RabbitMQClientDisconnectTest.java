@@ -71,7 +71,7 @@ public class RabbitMQClientDisconnectTest {
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
   private RabbitMQChannel pubChannel;
-  private RabbitMQRepublishingPublisher publisher;
+  private RabbitMQPublisher publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   

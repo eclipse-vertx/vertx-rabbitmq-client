@@ -19,45 +19,49 @@ import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.BuiltinExchangeType;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
+import io.vertx.core.Vertx;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
-import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.vertx.rabbitmq.RabbitMQPublisher;
+
 
 /**
  *
  * @author jtalbut
  */
-public class FuturePublisher implements RabbitMQPublisherStresser {
+public class Publisher implements RabbitMQPublisherStresser {
 
-  private static final Logger log = LoggerFactory.getLogger(FuturePublisher.class);
+  private static final Logger log = LoggerFactory.getLogger(Publisher.class);
   
+  private final Vertx vertx;
   private final RabbitMQChannel channel;
-  private String exchange;
-  private RabbitMQFuturePublisher publisher;
+  private RabbitMQPublisher publisher;
+  private final boolean withRetries;
 
-  public FuturePublisher(RabbitMQConnection connection) {
+  public Publisher(Vertx vertx, RabbitMQConnection connection, boolean withRetries) {
+    this.vertx = vertx;
     this.channel = connection.createChannel();
+    this.withRetries = withRetries;
   }
   
   @Override
   public String getName() {
-    return "Future publisher";
+    return "Future publisher 2 " + (withRetries ? "with" : "without") + " retries";
   }
 
   @Override
   public Future<Void> init(String exchange) {
-    this.exchange = exchange;
     channel.addChannelEstablishedCallback(promise -> {
       channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
               .onComplete(promise)
               ;
     });
-    publisher = channel.createFuturePublisher(exchange, new RabbitMQPublisherOptions().setMaxInternalQueueSize(1000000));
+    publisher = channel.createPublisher(exchange, new RabbitMQPublisherOptions().setResendOnReconnect(withRetries));
     return Future.succeededFuture();
   }
   

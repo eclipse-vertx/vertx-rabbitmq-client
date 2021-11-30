@@ -33,7 +33,6 @@ import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
-import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayList;
@@ -41,8 +40,8 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import io.vertx.rabbitmq.RabbitMQRepublishingPublisher;
 import java.io.IOException;
+import io.vertx.rabbitmq.RabbitMQPublisher;
 
 /**
  *
@@ -96,15 +95,10 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public RabbitMQRepublishingPublisher createPublisher(String exchange, RabbitMQPublisherOptions options) {
-    return new RabbitMQRepublishingPublisherImpl(vertx, this, exchange, options, retries > 0);
+  public RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options) {
+    return new RabbitMQPublisherImpl(vertx, this, exchange, options);
   }
 
-  @Override
-  public RabbitMQFuturePublisher createFuturePublisher(String exchange, RabbitMQPublisherOptions options) {
-    return new RabbitMQFuturePublisherImpl(vertx, this, exchange, options);
-  }
-  
   @Override
   public RabbitMQConsumer createConsumer(String queue, RabbitMQConsumerOptions options) {
     RabbitMQConsumerImpl consumer = new RabbitMQConsumerImpl(vertx, vertx.getOrCreateContext(), this, queue, options);    

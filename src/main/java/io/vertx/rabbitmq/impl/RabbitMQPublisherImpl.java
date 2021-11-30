@@ -17,6 +17,7 @@ package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.AMQP.BasicProperties;
+import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -25,7 +26,6 @@ import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
-import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -35,15 +35,16 @@ import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.vertx.rabbitmq.RabbitMQPublisher;
 
 /**
  * This is intended to be the one Publisher to rule them all.
  * The spead of the Future Publisher with the option of republishing when connections are re-established (which other tests have shown does slow it down slightly).
  * @author jtalbut
  */
-public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
+public class RabbitMQPublisherImpl implements RabbitMQPublisher {
   
-  private static final Logger log = LoggerFactory.getLogger(RabbitMQFuturePublisherImpl2.class);
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
   
   private final Vertx vertx;
   private final RabbitMQChannel channel;
@@ -117,11 +118,11 @@ public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
     }
   }
   
-  public RabbitMQFuturePublisherImpl2(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options, boolean resendOnReconnect) {
+  public RabbitMQPublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options) {
     this.vertx = vertx;
     this.channel = channel;
     this.exchange = exchange;
-    this.resendOnReconnect = resendOnReconnect;
+    this.resendOnReconnect = options.isResendOnReconnect();
     this.context = vertx.getOrCreateContext();
     this.channel.addChannelEstablishedCallback(p -> {
       addConfirmListener()
@@ -174,6 +175,7 @@ public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
   private void channelRecoveryCallback(Channel rawChannel) {
     boolean done = false;
     List<MessageDetails> messagesToResend = copyPromises();
+    log.debug("Connection recovered, resending {} messages", messagesToResend.size());
     for (MessageDetails tp : messagesToResend) {
       MessageDetails md = (MessageDetails) tp;
       long deliveryTag = rawChannel.getNextPublishSeqNo();
@@ -254,7 +256,17 @@ public class RabbitMQFuturePublisherImpl2 implements RabbitMQFuturePublisher {
         }
       }
     }).onFailure(ex -> {
-      promise.fail(ex);
+      if (ex instanceof AlreadyClosedException) {
+        synchronized(promises) {
+          if (resendOnReconnect) {
+            promises.addLast(new MessageDetails(channel.getChannelId(), -1, promise, routingKey, properties, body));
+          } else {
+            promises.addLast(new MessageDetails(channel.getChannelId(), -1, promise));
+          }
+        }
+      } else {
+        promise.fail(ex);
+      }
     });
     return promise.future();
   }

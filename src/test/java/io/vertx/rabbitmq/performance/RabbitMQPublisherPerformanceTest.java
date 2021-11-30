@@ -164,11 +164,8 @@ public class RabbitMQPublisherPerformanceTest {
             , new WaitEveryNMessages(connection, 10)
             , new WaitEveryNMessages(connection, 100)
             , new WaitEveryNMessages(connection, 1000)
-            , new FuturePublisherWithRetries(testRunContext.vertx(), connection, true)
-            , new FuturePublisherWithRetries(testRunContext.vertx(), connection, false)
-            , new FuturePublisher(connection)
-            , new RepublishingPublisher(connection)
-            , new RepublishingPublisher2(testRunContext.vertx(), connection)
+            , new Publisher(testRunContext.vertx(), connection, true)
+            , new Publisher(testRunContext.vertx(), connection, false)
     );
 
     channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)

@@ -31,7 +31,6 @@ import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
-import io.vertx.rabbitmq.RabbitMQFuturePublisher;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.io.IOException;
@@ -46,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
+import io.vertx.rabbitmq.RabbitMQPublisher;
 
 /**
  *
@@ -86,7 +86,7 @@ public class RabbitMQFuturePublisherImplTest {
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
   private RabbitMQChannel pubChannel;
-  private RabbitMQFuturePublisher publisher;
+  private RabbitMQPublisher publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   
@@ -162,7 +162,7 @@ public class RabbitMQFuturePublisherImplTest {
                 }
               });
     });
-    publisher = pubChannel.createFuturePublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
+    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
     AtomicLong counter = new AtomicLong();
     AtomicLong postCount = new AtomicLong(20);
     AtomicLong timerId = new AtomicLong();

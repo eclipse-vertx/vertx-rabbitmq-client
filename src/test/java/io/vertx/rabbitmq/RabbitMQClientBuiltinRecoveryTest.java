@@ -69,7 +69,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private final Vertx vertx;
   private RabbitMQConnection connection;
 
-  private final Set<Long> receivedMessages = new HashSet<>();
+  private final Set<String> receivedMessages = new HashSet<>();
   
   private final Promise<Void> firstMessagesReceived = Promise.promise();
   private final AtomicBoolean hasShutdown = new AtomicBoolean(false);
@@ -78,7 +78,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
   private RabbitMQChannel pubChannel;
-  private RabbitMQRepublishingPublisher publisher;
+  private RabbitMQPublisher publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   
@@ -162,7 +162,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .onComplete(p);
     });
-    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
+    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions().setResendOnReconnect(true));
     AtomicLong counter = new AtomicLong();
     AtomicLong postShutdownCount = new AtomicLong(20);
     AtomicLong timerId = new AtomicLong();
@@ -173,9 +173,12 @@ public class RabbitMQClientBuiltinRecoveryTest {
     Then continue to send a further postShutdownCount messages, before cancelling the periodic timer and completing allMessagesSent with the total count of messages sent.
     */
     timerId.set(vertx.setPeriodic(200, v -> {
-      long value = counter.incrementAndGet();
+      String value = "MSG " + counter.incrementAndGet();
       logger.info("Publishing message {}", value);
-      publisher.publish("", new BasicProperties(), Buffer.buffer(Long.toString(value)));
+      publisher.publish("", new BasicProperties(), Buffer.buffer(value))
+              .onFailure(ex -> {
+                logger.warn("Failed to send message {}: ", value, ex);
+              });
       if (hasShutdown.get()) {
         messageSentAfterShutdown.tryComplete();
         if (postShutdownCount.decrementAndGet() == 0) {
@@ -199,15 +202,15 @@ public class RabbitMQClientBuiltinRecoveryTest {
       hasShutdown.set(true);
     });
     
-    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
+    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions().setReconnectInterval(0));
     consumer.handler(message -> {
-      Long index = Long.parseLong(message.body().toString(StandardCharsets.UTF_8));
+      String body = message.body().toString(StandardCharsets.UTF_8);
       synchronized(receivedMessages) {
-        receivedMessages.add(index);
+        receivedMessages.add(body);
         if (receivedMessages.size() > 5) {
           firstMessagesReceived.tryComplete();
         }
-        logger.info("Received message: {} (have {})", index, receivedMessages.size());
+        logger.info("Received message: {} (have {})", body, receivedMessages.size());
         Future<Long> allMessagesSentFuture = allMessagesSent.future();
         if (allMessagesSentFuture.isComplete() && (receivedMessages.size() == allMessagesSentFuture.result())) {
           allMessagesReceived.tryComplete();

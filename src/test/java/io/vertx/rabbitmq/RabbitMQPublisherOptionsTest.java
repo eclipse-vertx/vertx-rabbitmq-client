@@ -35,13 +35,12 @@ public class RabbitMQPublisherOptionsTest {
   public void testToJson() {
     
     RabbitMQPublisherOptions options = new RabbitMQPublisherOptions()
-            .setReconnectAttempts(123456)
-            .setMaxInternalQueueSize(78)
+            .setResendOnReconnect(true)
             ;
     JsonObject json = options.toJson();
     logger.info("Json: {}", json);
-    assertEquals(123456, json.getInteger("reconnectAttempts").intValue());
-    assertEquals(78, json.getInteger("maxInternalQueueSize").intValue());
+    assertEquals(true, json.getBoolean("resendOnReconnect"));
+    assertEquals(1, json.size());
     
   }
 }
