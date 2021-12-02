@@ -30,12 +30,13 @@ import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQPublisher;
+import java.io.IOException;
+import java.util.Collection;
 
 /**
  * This is intended to be the one Publisher to rule them all.
@@ -55,6 +56,7 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
   private String lastChannelId = null;
 
   private final Deque<MessageDetails> promises = new ArrayDeque<>();
+  private final Deque<MessageDetails> resend = new ArrayDeque<>();
       
   /**
    * POD holding the details of the promise to be completed and enough data to resend a message if required.
@@ -133,11 +135,12 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
                     p.complete();
                   } else if (!lastChannelId.equals(channel.getChannelId())) {
                     if (resendOnReconnect) {
-                      List<MessageDetails> messagesToResend = copyPromises();
-                      doResendAsync(p, messagesToResend.iterator());
+                      copyPromises(resend);
+                      doResendAsync(p);
                     } else {
                       lastChannelId = channel.getChannelId();
-                      List<MessageDetails> failedPromises = copyPromises();
+                      List<MessageDetails> failedPromises = new ArrayList<>();
+                      copyPromises(failedPromises);
                       failedPromises.forEach(tp -> tp.promise.fail("Channel reconnected"));
                       p.complete();
                     }
@@ -152,9 +155,14 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
     this.channel.addChannelRecoveryCallback(this::channelRecoveryCallback);
   }
   
-  private void doResendAsync(Promise<Void> promise, Iterator<MessageDetails> iter) {
-    if (iter.hasNext()) {
-      MessageDetails md = (MessageDetails) iter.next();
+  private Future<Void> doResendAsync(Promise<Void> promise) {
+    MessageDetails md;
+    synchronized(promises) {
+      md = resend.pollFirst();
+    }
+    if (md == null) {
+      promise.complete();
+    } else {
       Promise<Void> publishPromise = md.promise;
       channel.basicPublish(exchange, md.routingKey, false, md.properties, md.message, deliveryTag -> {
         synchronized(promises) {
@@ -163,37 +171,39 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
       }).onFailure(ex -> {
         publishPromise.fail(ex);
       }).onComplete(ar -> {
-        doResendAsync(promise, iter);
+        doResendAsync(promise);
       });
-    } else {
-      promise.complete();
     }
+    return promise.future();
   }
   
   // This is called on a RabbitMQ thread and does not involve Vertx
   // The result is rather unpleasant, but is a necessary thing when faced with Java client recoveries.
   private void channelRecoveryCallback(Channel rawChannel) {
     boolean done = false;
-    List<MessageDetails> messagesToResend = copyPromises();
-    log.debug("Connection recovered, resending {} messages", messagesToResend.size());
-    for (MessageDetails tp : messagesToResend) {
-      MessageDetails md = (MessageDetails) tp;
-      long deliveryTag = rawChannel.getNextPublishSeqNo();
-      channel.basicPublish(exchange, md.routingKey, true, md.properties, md.message);
-      MessageDetails md2 = new MessageDetails(md.channelId, deliveryTag, md.promise, md.routingKey, md.properties, md.message);
-      synchronized(promises) {
-        promises.addLast(md2);
+    copyPromises(resend);    
+    synchronized(promises) {
+      log.debug("Connection recovered, resending {} messages", resend.size());
+      for (MessageDetails md : resend) {
+        long deliveryTag = rawChannel.getNextPublishSeqNo();
+        try {
+          rawChannel.basicPublish(exchange, md.routingKey, md.properties, md.message);
+          MessageDetails md2 = new MessageDetails(md.channelId, deliveryTag, md.promise, md.routingKey, md.properties, md.message);
+          promises.addLast(md2);
+        } catch(IOException ex) {
+          resend.addFirst(md);
+        }
       }
     }
   }
 
-  private List<MessageDetails> copyPromises() {
-    List<MessageDetails> failedPromises;
+  private void copyPromises(Collection<MessageDetails> target) {
     synchronized(promises) {
-      failedPromises = new ArrayList<>(promises);
+      for (MessageDetails md : promises) {
+        target.add(md);
+      }
       promises.clear();
     }
-    return failedPromises;
   }
   
   protected final Future<Void> addConfirmListener() {
@@ -232,9 +242,9 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
   private void completePromise(Promise<Void> promise, RabbitMQConfirmation rawConfirmation) {
     if (promise != null) {
       if (rawConfirmation.isSucceeded()) {
-        promise.complete();
+        promise.tryComplete();
       } else {
-        promise.fail("Negative confirmation received");
+        promise.tryFail("Negative confirmation received");
       }
     }
   }
@@ -256,13 +266,9 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
         }
       }
     }).onFailure(ex -> {
-      if (ex instanceof AlreadyClosedException) {
+      if (resendOnReconnect && ex instanceof AlreadyClosedException) {
         synchronized(promises) {
-          if (resendOnReconnect) {
-            promises.addLast(new MessageDetails(channel.getChannelId(), -1, promise, routingKey, properties, body));
-          } else {
-            promises.addLast(new MessageDetails(channel.getChannelId(), -1, promise));
-          }
+          resend.addLast(new MessageDetails(channel.getChannelId(), -1, promise, routingKey, properties, body));
         }
       } else {
         promise.fail(ex);

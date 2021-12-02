@@ -29,7 +29,6 @@ import io.vertx.ext.unit.junit.VertxUnitRunner;
 import io.vertx.rabbitmq.RabbitMQBrokerProvider;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQClient;
-import io.vertx.rabbitmq.RabbitMQClientTest;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import java.io.IOException;
@@ -61,7 +60,7 @@ import org.testcontainers.containers.GenericContainer;
 public class RabbitMQPublisherPerformanceTest {
   
   @SuppressWarnings("constantname")
-  private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(RabbitMQPublisherPerformanceTest.class);
   
   private static final long WARMUP_ITERATIONS = 10 * 1000;
   private static final long ITERATIONS = 50 * 1000;
@@ -191,6 +190,7 @@ public class RabbitMQPublisherPerformanceTest {
               .compose(v -> init(url, exchange, testIter))
               ;
     } else {
+      logger.info("Running performance tests with {} messages", ITERATIONS);
       return Future.succeededFuture();
     }
   }
