@@ -21,6 +21,7 @@ import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
+import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -62,7 +63,7 @@ public class FireAndForget implements RabbitMQPublisherStresser {
     long iter;
     List<Future> futures = new ArrayList<>();
     while((iter = counter.decrementAndGet()) > 0) {
-      Future pubFuture = channel.basicPublish(exchange, "", true, new AMQP.BasicProperties(), Long.toString(iter).getBytes());
+      Future pubFuture = channel.basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new AMQP.BasicProperties(), Long.toString(iter).getBytes());
       futures.add(pubFuture);
     }
     return CompositeFuture.all(futures).mapEmpty();

@@ -98,6 +98,7 @@ public class RabbitMQClientTest {
   
   @Test  
   public void testSendMessageWithWorkingServer(TestContext context) {
+    logger.debug("testSendMessageWithWorkingServer");
     RabbitMQOptions config = config();
     RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
 
@@ -115,22 +116,23 @@ public class RabbitMQClientTest {
             .compose(v -> conChan.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new TestConsumer(conChan, context, donePromise)))
             .compose(v -> pubChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
             .compose(v -> pubChan.confirmSelect())
-            .compose(v -> pubChan.basicPublish(exchange, "", true, new BasicProperties(), "Hello".getBytes(StandardCharsets.UTF_8)))
+            .compose(v -> pubChan.basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new BasicProperties(), "Hello".getBytes(StandardCharsets.UTF_8)))
             .compose(v -> pubChan.waitForConfirms(1000))
             .compose(v -> donePromise.future())
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 connection.close().onComplete(ar2 -> {
+                  logger.info("Failing testSendMessageWithWorkingServer: ", ar.cause());
                   async.complete();
                 });
               } else {
-                logger.info("Failing test: ", ar.cause());
+                logger.info("Failing testSendMessageWithWorkingServer: ", ar.cause());
                 context.fail(ar.cause());
               }
             })
             ;
         
-    logger.info("Ending test");
+    logger.info("Ending testSendMessageWithWorkingServer");
   }
   
   private int findOpenPort() throws IOException {
@@ -141,10 +143,10 @@ public class RabbitMQClientTest {
   
   @Test
   public void testCreateWithServerThatArrivesLate(TestContext context) throws IOException {    
+    logger.debug("testCreateWithServerThatArrivesLate");
     RabbitMQOptions config = new RabbitMQOptions();
     config.setReconnectInterval(500);
     config.setInitialConnectAttempts(50);
-    RabbitMQConnectionImpl connection = (RabbitMQConnectionImpl) RabbitMQClient.create(testRunContext.vertx(), config);
 
     int port = findOpenPort();    
     GenericContainer container = new FixedHostPortGenericContainer(RabbitMQBrokerProvider.IMAGE_NAME)
@@ -152,6 +154,7 @@ public class RabbitMQClientTest {
             ;
     config.setUri("amqp://" + container.getContainerIpAddress() + ":" + port);
 
+    RabbitMQConnectionImpl connection = (RabbitMQConnectionImpl) RabbitMQClient.create(testRunContext.vertx(), config);
     testRunContext.vertx().setTimer(1000, time -> {
       container.start();
     });
@@ -162,7 +165,7 @@ public class RabbitMQClientTest {
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 long end = System.currentTimeMillis();
-                logger.info("Completing test with reconnect count = {} (expected 1 < {} < {})"
+                logger.info("Completing testCreateWithServerThatArrivesLate with reconnect count = {} (expected 1 < {} < {})"
                         , connection.getReconnectCount()
                         , connection.getReconnectCount()
                         , (2000 + end - start) / config.getReconnectInterval()
@@ -177,11 +180,11 @@ public class RabbitMQClientTest {
                   container.stop();
                 });
               } else {
-                logger.info("Failing test");
+                logger.info("Failing testCreateWithServerThatArrivesLate");
                 context.fail(ar.cause());
               }
             });
-    logger.info("Ending test");    
+    logger.info("Ending testCreateWithServerThatArrivesLate");    
   }
   
   public RabbitMQOptions config() {

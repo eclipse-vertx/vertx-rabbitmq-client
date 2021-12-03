@@ -26,6 +26,7 @@ import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQOptions;
+import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
@@ -271,7 +272,7 @@ public class RabbitMQExamples {
     RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
     RabbitMQChannel channel = connection.createChannel();
     channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
-            .compose(v -> channel.basicPublish("exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
+            .compose(v -> channel.basicPublish(new RabbitMQPublishOptions(), "exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
             .onComplete(ar -> {
             });
   }  

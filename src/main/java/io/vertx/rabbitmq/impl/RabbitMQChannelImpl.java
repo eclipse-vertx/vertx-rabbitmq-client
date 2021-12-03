@@ -29,11 +29,14 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.eventbus.MessageCodec;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
+import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +57,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   private final Vertx vertx;
   private final RabbitMQConnectionImpl connection;
   private final Context context;
+  private final CodecManager codecManager;
   
   private volatile String channelId;
   
@@ -73,6 +77,11 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     this.connection = connection;
     this.retries = options.getReconnectAttempts();
     this.context = vertx.getOrCreateContext();
+    this.codecManager = connection.getCodecManager();
+  }
+
+  public CodecManager getCodecManager() {
+    return codecManager;
   }
   
   @Override
@@ -266,14 +275,22 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     });
     
   }
+  
+  byte[] convertBody(Object body, String codecName) {
+    if (body instanceof byte[]) {
+      return (byte[]) body;
+    } else if (body instanceof Buffer) {
+      return ((Buffer) body).getBytes();
+    } else {
+      MessageCodec codec = codecManager.lookupCodec(body, codecName);
+      Buffer buffer = Buffer.buffer();
+      codec.encodeToWire(buffer, body);
+      return buffer.getBytes();
+    }
+  }
 
   @Override
-  public Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body) {
-    return basicPublish(exchange, routingKey, mandatory, props, body, null);
-  }
-    
-  @Override
-  public Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler) {
+  public Future<Void> basicPublish(RabbitMQPublishOptions options, String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, Object body) {
     /**
      * This is an optimisation that avoids considering basicPublish to be a blocking operation as it translates directly to an NIO call.
      * This is only valid if:
@@ -287,11 +304,11 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
       Channel channel = createLock.get();
       if (!confirmSelected && channel != null && channel.isOpen()) {
         synchronized(publishLock) {
-          if (deliveryTagHandler != null) {
+          if (options != null && options.getDeliveryTagHandler() != null) {
             long deliveryTag = channel.getNextPublishSeqNo();
-            deliveryTagHandler.handle(deliveryTag);
+            options.getDeliveryTagHandler().handle(deliveryTag);
           }
-          channel.basicPublish(exchange, routingKey, mandatory, props, body);
+          channel.basicPublish(exchange, routingKey, mandatory, props, convertBody(body, options == null ? null : options.getCodec()));
           return Future.succeededFuture();
         }
       }
@@ -299,42 +316,27 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
       log.warn("Synchronous send of basicPublish({}, {}, {}, ...) failed: ", exchange, routingKey, mandatory, ex);
     }
     
+    boolean waitForConfirms = options != null && options.isWaitForConfirm();
+    if (waitForConfirms) {
+      if (!confirmSelected) {
+        return Future.failedFuture(new IllegalStateException("Must call confirmSelect before basicPublishWithConfirm"));
+      }
+    }    
+      
     return onChannel(channel -> {
       synchronized(publishLock) {
-        if (deliveryTagHandler != null) {
+        if (options != null && options.getDeliveryTagHandler() != null) {
           long deliveryTag = channel.getNextPublishSeqNo();
-          deliveryTagHandler.handle(deliveryTag);
+          options.getDeliveryTagHandler().handle(deliveryTag);
+        }
+        channel.basicPublish(exchange, routingKey, mandatory, props, convertBody(body, options == null ? null : options.getCodec()));
+        if (waitForConfirms) {
+          channel.waitForConfirms();
         }
       }
-      channel.basicPublish(exchange, routingKey, mandatory, props, body);
       return null;
     }).mapEmpty();
     
-  }
-
-  @Override
-  public Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler) {
-
-    if (!confirmSelected) {
-      return Future.failedFuture(new IllegalStateException("Must call confirmSelect before basicPublishWithConfirm"));
-    }
-    return onChannel(channel -> {
-      synchronized(publishLock) {
-        if (deliveryTagHandler != null) {
-          long deliveryTag = channel.getNextPublishSeqNo();
-          deliveryTagHandler.handle(deliveryTag);
-        }
-      }
-      channel.basicPublish(exchange, routingKey, mandatory, props, body);
-      channel.waitForConfirms();
-      return null;
-    }).mapEmpty();
-    
-  }
-
-  @Override
-  public Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body) {
-    return basicPublishWithConfirm(exchange, routingKey, mandatory, props, body, null);
   }
 
   @Override

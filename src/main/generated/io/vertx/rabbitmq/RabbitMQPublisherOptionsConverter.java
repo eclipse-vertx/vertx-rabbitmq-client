@@ -20,6 +20,11 @@ public class RabbitMQPublisherOptionsConverter {
   public static void fromJson(Iterable<java.util.Map.Entry<String, Object>> json, RabbitMQPublisherOptions obj) {
     for (java.util.Map.Entry<String, Object> member : json) {
       switch (member.getKey()) {
+        case "messageCodec":
+          if (member.getValue() instanceof String) {
+            obj.setMessageCodec((String)member.getValue());
+          }
+          break;
         case "resendOnReconnect":
           if (member.getValue() instanceof Boolean) {
             obj.setResendOnReconnect((Boolean)member.getValue());
@@ -34,6 +39,9 @@ public class RabbitMQPublisherOptionsConverter {
   }
 
   public static void toJson(RabbitMQPublisherOptions obj, java.util.Map<String, Object> json) {
+    if (obj.getMessageCodec() != null) {
+      json.put("messageCodec", obj.getMessageCodec());
+    }
     json.put("resendOnReconnect", obj.isResendOnReconnect());
   }
 }

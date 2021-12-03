@@ -21,6 +21,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
+import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -71,7 +72,7 @@ public class WaitEveryNMessages implements RabbitMQPublisherStresser {
     if (iter <= 0) {
       promise.complete();
     } else {
-      channel.basicPublish(exchange, "", true, new AMQP.BasicProperties(), Long.toString(iter).getBytes())
+      channel.basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new AMQP.BasicProperties(), Long.toString(iter).getBytes())
               .compose(v -> {
                 if (iter % n == 0) {
                   return channel.waitForConfirms(100000);

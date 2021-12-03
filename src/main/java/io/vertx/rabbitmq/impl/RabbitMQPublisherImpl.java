@@ -19,13 +19,11 @@ import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
-import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
+import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -48,9 +46,9 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
   private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
   
   private final Vertx vertx;
-  private final RabbitMQChannel channel;
+  private final RabbitMQChannelImpl channel;
   private final String exchange;
-  private final Context context;
+  private final String messageCodec;
   private final boolean resendOnReconnect;
 
   private String lastChannelId = null;
@@ -70,9 +68,9 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
 
     final String routingKey;
     final BasicProperties properties;
-    final byte[] message;
+    final Object message;
 
-    MessageDetails(String channelId, long deliveryTag, Promise<Void> promise, String routingKey, BasicProperties properties, byte[] message) {
+    MessageDetails(String channelId, long deliveryTag, Promise<Void> promise, String routingKey, BasicProperties properties, Object message) {
       this.channelId = channelId;
       this.deliveryTag = deliveryTag;
       this.promise = promise;
@@ -120,12 +118,12 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
     }
   }
   
-  public RabbitMQPublisherImpl(Vertx vertx, RabbitMQChannel channel, String exchange, RabbitMQPublisherOptions options) {
+  public RabbitMQPublisherImpl(Vertx vertx, RabbitMQChannelImpl channel, String exchange, RabbitMQPublisherOptions options) {
     this.vertx = vertx;
     this.channel = channel;
     this.exchange = exchange;
     this.resendOnReconnect = options.isResendOnReconnect();
-    this.context = vertx.getOrCreateContext();
+    this.messageCodec = options.getMessageCodec();
     this.channel.addChannelEstablishedCallback(p -> {
       addConfirmListener()
               .onComplete(ar -> {                
@@ -164,11 +162,11 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
       promise.complete();
     } else {
       Promise<Void> publishPromise = md.promise;
-      channel.basicPublish(exchange, md.routingKey, false, md.properties, md.message, deliveryTag -> {
+      channel.basicPublish(new RabbitMQPublishOptions().setDeliveryTagHandler(deliveryTag -> {
         synchronized(promises) {
           promises.addLast(new MessageDetails(md.channelId, md.deliveryTag, publishPromise, md.routingKey, md.properties, md.message));
         }
-      }).onFailure(ex -> {
+      }), exchange, md.routingKey, false, md.properties, md.message).onFailure(ex -> {
         publishPromise.fail(ex);
       }).onComplete(ar -> {
         doResendAsync(promise);
@@ -186,8 +184,8 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
       log.debug("Connection recovered, resending {} messages", resend.size());
       for (MessageDetails md : resend) {
         long deliveryTag = rawChannel.getNextPublishSeqNo();
-        try {
-          rawChannel.basicPublish(exchange, md.routingKey, md.properties, md.message);
+        try {          
+          rawChannel.basicPublish(exchange, md.routingKey, md.properties, channel.convertBody(md.message, messageCodec));
           MessageDetails md2 = new MessageDetails(md.channelId, deliveryTag, md.promise, md.routingKey, md.properties, md.message);
           promises.addLast(md2);
         } catch(IOException ex) {
@@ -250,14 +248,11 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
   }
 
   @Override
-  public Future<Void> publish(String routingKey, AMQP.BasicProperties properties, Buffer body) {
-    return publish(routingKey, properties, body.getBytes());
-  }
-
-  @Override
-  public Future<Void> publish(String routingKey, AMQP.BasicProperties properties, byte[] body) {
+  public Future<Void> publish(String routingKey, AMQP.BasicProperties properties, Object body) {
     Promise<Void> promise = Promise.promise();
-    channel.basicPublish(exchange, routingKey, false, properties, body, deliveryTag -> {
+    channel.basicPublish(new RabbitMQPublishOptions()
+            .setCodec(messageCodec)
+            .setDeliveryTagHandler(deliveryTag -> {
       synchronized(promises) {
         if (resendOnReconnect) {
           promises.addLast(new MessageDetails(channel.getChannelId(), deliveryTag, promise, routingKey, properties, body));
@@ -265,7 +260,7 @@ public class RabbitMQPublisherImpl implements RabbitMQPublisher {
           promises.addLast(new MessageDetails(channel.getChannelId(), deliveryTag, promise));
         }
       }
-    }).onFailure(ex -> {
+    }), exchange, routingKey, false, properties, body).onFailure(ex -> {
       if (resendOnReconnect && ex instanceof AlreadyClosedException) {
         synchronized(promises) {
           resend.addLast(new MessageDetails(channel.getChannelId(), -1, promise, routingKey, properties, body));

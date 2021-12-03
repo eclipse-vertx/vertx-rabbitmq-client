@@ -159,14 +159,48 @@ public interface RabbitMQChannel {
           
   Future<Void> queueBind(String queue, String exchange, String routingKey, Map<String,Object> arguments);
   
-  Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body);
+    /**
+     * Publish a message.
+     *
+     * The Future returned from this method will be completed when a message has been sent.
+     * If options.waitForConfirm is set to true the Future will only be completed after the broker confirms that it has received the message for processing.
+     * This will block all other calls to basicPublish on this channel.
+     * If options.waitForConfirm is set to false the Future will be completed when the message has been sent, which does not necessarily mean that it has even reached the broker.
+     * Clients should choose one of:
+     * <ul>
+     * <li>Accept that messages may be lost.
+     * <li>Set waitForConfirm to true and accept a hit to the performance of all publishing on this channel.
+     * <li>Use asynchronous confirmations (via addConfirmListener).
+     * <li>Use the RabbitMQPublisher that provides an implementation of an asynchronous confirmation handler.
+     * </ul>
+     * 
+     * The message body type must be one of:
+     * <ul>
+     * <li>byte[] 
+     *   The most efficient option, any other type must be converted to this.
+     * <li>Buffer 
+     *   The data will be extracted using getBytes(). 
+     *   It is not possible to specify a subset of bytes with this method, use Buffer.slice if a subset is required.
+     * <li>Any other type for which a MessageCodec has been registered.
+     *   The MessageCodec can either be identified by name (options.setCodec) or registered as a defaultCodec which will be identified by class.
+     * </ul>
+     * 
+     * The options.deliveryTagHandler (if not null) is called before com.rabbitmq.client.Channel.basicPublish is called.
+     * It is possible (and common) for a message confirmation to be received <i>before</i> com.rabbitmq.client.Channel.basicPublish returns
+     * - any housekeeping to be done with the deliveryTag must be carried out in this handler.
+     * 
+     * @see com.rabbitmq.client.Channel.basicPublish
+     * @see <a href="https://www.rabbitmq.com/alarms.html">Resource-driven alarms</a>
+     * @param options options relating to this library's handling of the message
+     * @param exchange the exchange to publish the message to
+     * @param routingKey the routing key
+     * @param mandatory true if the 'mandatory' flag is to be set
+     * @param props other properties for the message - routing headers etc
+     * @param body the message body
+     * @return A Future that will be completed when the message has been sent.
+     */
+  Future<Void> basicPublish(RabbitMQPublishOptions options, String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, Object body);
   
-  Future<Void> basicPublish(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler);
-
-  Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body);
-  
-  Future<Void> basicPublishWithConfirm(String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, byte[] body, Handler<Long> deliveryTagHandler);
-
   Future<Void> confirmSelect();
 
   Future<Void> waitForConfirms(long timeout);

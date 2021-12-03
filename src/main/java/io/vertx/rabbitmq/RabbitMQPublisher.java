@@ -18,7 +18,6 @@ package io.vertx.rabbitmq;
 import com.rabbitmq.client.AMQP;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.core.Future;
-import io.vertx.core.buffer.Buffer;
 
 /**
  *
@@ -29,26 +28,14 @@ public interface RabbitMQPublisher {
   /**
    * Publish a message. 
    * 
-   * @param routingKey
-   * @param properties
-   * @param body
+   * @param routingKey the routing key
+   * @param properties other properties for the message - routing headers etc
+   * @param body the message body
    * @return A Future that will be completed when the message is confirmed, or failed if the channel is broken.
    * @see com.rabbitmq.client.Channel#basicPublish(String, String, AMQP.BasicProperties, byte[])
    */
   @GenIgnore(GenIgnore.PERMITTED_TYPE)
-  Future<Void> publish(String routingKey, AMQP.BasicProperties properties, Buffer body);
-
-  /**
-   * Publish a message. 
-   * 
-   * @param routingKey
-   * @param properties
-   * @param body
-   * @return A Future that will be completed when the message is confirmed, or failed if the channel is broken.
-   * @see com.rabbitmq.client.Channel#basicPublish(String, String, AMQP.BasicProperties, byte[])
-   */
-  @GenIgnore(GenIgnore.PERMITTED_TYPE)
-  Future<Void> publish(String routingKey, AMQP.BasicProperties properties, byte[] body);
+  Future<Void> publish(String routingKey, AMQP.BasicProperties properties, Object body);
 
   /**
    * Prevent any future asynchronous behaviour.
