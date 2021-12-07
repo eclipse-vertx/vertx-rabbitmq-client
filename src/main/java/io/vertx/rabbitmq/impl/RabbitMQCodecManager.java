@@ -11,14 +11,11 @@
 
 package io.vertx.rabbitmq.impl;
 
-import io.vertx.rabbitmq.impl.codecs.RabbitMQStringMessageCodec;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.eventbus.MessageCodec;
-import io.vertx.core.eventbus.ReplyException;
-import io.vertx.core.eventbus.impl.codecs.*;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQStringMessageCodec;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.rabbitmq.impl.codecs.RabbitMQBooleanMessageCodec;
+import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQJsonArrayMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQJsonObjectMessageCodec;
 
@@ -29,69 +26,42 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
-public class CodecManager {
+public class RabbitMQCodecManager {
 
   // The standard message codecs
-  public static final MessageCodec<String, String> PING_MESSAGE_CODEC = new PingMessageCodec();
-  public static final MessageCodec<String, String> NULL_MESSAGE_CODEC = new NullMessageCodec();
-  public static final MessageCodec<String, String> STRING_MESSAGE_CODEC = new RabbitMQStringMessageCodec();
-  public static final MessageCodec<Buffer, Buffer> BUFFER_MESSAGE_CODEC = new BufferMessageCodec();
-  public static final MessageCodec<JsonObject, JsonObject> JSON_OBJECT_MESSAGE_CODEC = new RabbitMQJsonObjectMessageCodec();
-  public static final MessageCodec<JsonArray, JsonArray> JSON_ARRAY_MESSAGE_CODEC = new RabbitMQJsonArrayMessageCodec();
-  public static final MessageCodec<byte[], byte[]> BYTE_ARRAY_MESSAGE_CODEC = new ByteArrayMessageCodec();
-  public static final MessageCodec<Integer, Integer> INT_MESSAGE_CODEC = new IntMessageCodec();
-  public static final MessageCodec<Long, Long> LONG_MESSAGE_CODEC = new LongMessageCodec();
-  public static final MessageCodec<Float, Float> FLOAT_MESSAGE_CODEC = new FloatMessageCodec();
-  public static final MessageCodec<Double, Double> DOUBLE_MESSAGE_CODEC = new DoubleMessageCodec();
-  public static final MessageCodec<Boolean, Boolean> BOOLEAN_MESSAGE_CODEC = new RabbitMQBooleanMessageCodec();
-  public static final MessageCodec<Short, Short> SHORT_MESSAGE_CODEC = new ShortMessageCodec();
-  public static final MessageCodec<Character, Character> CHAR_MESSAGE_CODEC = new CharMessageCodec();
-  public static final MessageCodec<Byte, Byte> BYTE_MESSAGE_CODEC = new ByteMessageCodec();
-  public static final MessageCodec<ReplyException, ReplyException> REPLY_EXCEPTION_MESSAGE_CODEC = new ReplyExceptionMessageCodec();
+  public static final RabbitMQMessageCodec<String> STRING_MESSAGE_CODEC = new RabbitMQStringMessageCodec();
+  public static final RabbitMQMessageCodec<JsonObject> JSON_OBJECT_MESSAGE_CODEC = new RabbitMQJsonObjectMessageCodec();
+  public static final RabbitMQMessageCodec<JsonArray> JSON_ARRAY_MESSAGE_CODEC = new RabbitMQJsonArrayMessageCodec();
 
-  private final MessageCodec[] systemCodecs;
-  private final ConcurrentMap<String, MessageCodec> userCodecMap = new ConcurrentHashMap<>();
-  private final ConcurrentMap<Class, MessageCodec> defaultCodecMap = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, RabbitMQMessageCodec> userCodecMap = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Class, RabbitMQMessageCodec> defaultCodecMap = new ConcurrentHashMap<>();
 
-  public CodecManager() {
-    this.systemCodecs = codecs(NULL_MESSAGE_CODEC, PING_MESSAGE_CODEC, STRING_MESSAGE_CODEC, BUFFER_MESSAGE_CODEC, JSON_OBJECT_MESSAGE_CODEC, JSON_ARRAY_MESSAGE_CODEC,
-      BYTE_ARRAY_MESSAGE_CODEC, INT_MESSAGE_CODEC, LONG_MESSAGE_CODEC, FLOAT_MESSAGE_CODEC, DOUBLE_MESSAGE_CODEC,
-      BOOLEAN_MESSAGE_CODEC, SHORT_MESSAGE_CODEC, CHAR_MESSAGE_CODEC, BYTE_MESSAGE_CODEC, REPLY_EXCEPTION_MESSAGE_CODEC);
+  public byte[] convertBody(Object body, String codecName) {
+    if (body instanceof byte[]) {
+      return (byte[]) body;
+    } else if (body instanceof Buffer) {
+      return ((Buffer) body).getBytes();
+    } else if (body == null) {
+      return new byte[0];
+    } else {
+      RabbitMQMessageCodec codec = lookupCodec(body, codecName);
+      return codec.encodeToBytes(body);
+    }
   }
-
-  public MessageCodec lookupCodec(Object body, String codecName) {
-    MessageCodec codec;
+  
+  private RabbitMQMessageCodec lookupCodec(Object body, String codecName) {
+    RabbitMQMessageCodec codec;
     if (codecName != null) {
       codec = userCodecMap.get(codecName);
       if (codec == null) {
         throw new IllegalArgumentException("No message codec for name: " + codecName);
       }
-    } else if (body == null) {
-      codec = NULL_MESSAGE_CODEC;
     } else if (body instanceof String) {
       codec = STRING_MESSAGE_CODEC;
-    } else if (body instanceof Buffer) {
-      codec = BUFFER_MESSAGE_CODEC;
     } else if (body instanceof JsonObject) {
       codec = JSON_OBJECT_MESSAGE_CODEC;
     } else if (body instanceof JsonArray) {
       codec = JSON_ARRAY_MESSAGE_CODEC;
-    } else if (body instanceof Integer) {
-      codec = INT_MESSAGE_CODEC;
-    } else if (body instanceof Long) {
-      codec = LONG_MESSAGE_CODEC;
-    } else if (body instanceof Float) {
-      codec = FLOAT_MESSAGE_CODEC;
-    } else if (body instanceof Double) {
-      codec = DOUBLE_MESSAGE_CODEC;
-    } else if (body instanceof Boolean) {
-      codec = BOOLEAN_MESSAGE_CODEC;
-    } else if (body instanceof Short) {
-      codec = SHORT_MESSAGE_CODEC;
-    } else if (body instanceof Character) {
-      codec = CHAR_MESSAGE_CODEC;
-    } else if (body instanceof Byte) {
-      codec = BYTE_MESSAGE_CODEC;
     } else {
       codec = defaultCodecMap.get(body.getClass());
       if (codec == null) {
@@ -101,18 +71,17 @@ public class CodecManager {
     return codec;
   }
 
-  public MessageCodec getCodec(String codecName) {
+  public RabbitMQMessageCodec getCodec(String codecName) {
     return userCodecMap.get(codecName);
   }
 
-  public void registerCodec(MessageCodec codec) {
+  public void registerCodec(RabbitMQMessageCodec codec) {
     Objects.requireNonNull(codec, "codec");
-    Objects.requireNonNull(codec.name(), "code.name()");
-    checkSystemCodec(codec);
-    if (userCodecMap.containsKey(codec.name())) {
-      throw new IllegalStateException("Already a codec registered with name " + codec.name());
+    Objects.requireNonNull(codec.codecName(), "code.codecName()");
+    if (userCodecMap.containsKey(codec.codecName())) {
+      throw new IllegalStateException("Already a codec registered with name " + codec.codecName());
     }
-    userCodecMap.put(codec.name(), codec);
+    userCodecMap.put(codec.codecName(), codec);
   }
 
   public void unregisterCodec(String name) {
@@ -120,46 +89,18 @@ public class CodecManager {
     userCodecMap.remove(name);
   }
 
-  public <T> void registerDefaultCodec(Class<T> clazz, MessageCodec<T, ?> codec) {
+  public <T> void registerDefaultCodec(Class<T> clazz, RabbitMQMessageCodec<T> codec) {
     Objects.requireNonNull(clazz);
     Objects.requireNonNull(codec, "codec");
-    Objects.requireNonNull(codec.name(), "code.name()");
-    checkSystemCodec(codec);
     if (defaultCodecMap.containsKey(clazz)) {
       throw new IllegalStateException("Already a default codec registered for class " + clazz);
     }
-    if (userCodecMap.containsKey(codec.name())) {
-      throw new IllegalStateException("Already a codec registered with name " + codec.name());
-    }
     defaultCodecMap.put(clazz, codec);
-    userCodecMap.put(codec.name(), codec);
   }
 
   public void unregisterDefaultCodec(Class clazz) {
     Objects.requireNonNull(clazz);
-    MessageCodec codec = defaultCodecMap.remove(clazz);
-    if (codec != null) {
-      userCodecMap.remove(codec.name());
-    }
+    RabbitMQMessageCodec codec = defaultCodecMap.remove(clazz);
   }
-
-  public MessageCodec[] systemCodecs() {
-    return systemCodecs;
-  }
-
-  private void checkSystemCodec(MessageCodec codec) {
-    if (codec.systemCodecID() != -1) {
-      throw new IllegalArgumentException("Can't register a system codec");
-    }
-  }
-
-  private MessageCodec[] codecs(MessageCodec... codecs) {
-    MessageCodec[] arr = new MessageCodec[codecs.length];
-    for (MessageCodec codec: codecs) {
-      arr[codec.systemCodecID()] = codec;
-    }
-    return arr;
-  }
-
 
 }

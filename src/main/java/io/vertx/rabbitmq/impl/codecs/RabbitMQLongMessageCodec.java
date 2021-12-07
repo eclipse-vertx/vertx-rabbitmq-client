@@ -15,41 +15,63 @@
  */
 package io.vertx.rabbitmq.impl.codecs;
 
-import io.netty.util.CharsetUtil;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.eventbus.MessageCodec;
+import io.vertx.rabbitmq.RabbitMQMessageCodec;
 
 /**
  *
  * @author jtalbut
  */
-public class RabbitMQStringMessageCodec implements MessageCodec<String, String> {
+public class RabbitMQLongMessageCodec implements RabbitMQMessageCodec<Long> {
 
+  private final String name;
+  private final String contentType;
+
+  public RabbitMQLongMessageCodec() {
+    this.name = "long";
+    this.contentType = "application/x-long";
+  }
+  
   @Override
-  public void encodeToWire(Buffer buffer, String s) {
-    byte[] strBytes = s.getBytes(CharsetUtil.UTF_8);
-    buffer.appendBytes(strBytes);
+  public String codecName() {
+    return name;
   }
 
   @Override
-  public String decodeFromWire(int pos, Buffer buffer) {
-    byte[] bytes = buffer.getBytes();
-    return new String(bytes, CharsetUtil.UTF_8);
+  public byte[] encodeToBytes(Long value) {
+    return new byte[] {
+      (byte) value.longValue(),
+      (byte) (value >> 8),
+      (byte) (value >> 16),
+      (byte) (value >> 24),
+      (byte) (value >> 32),
+      (byte) (value >> 40),
+      (byte) (value >> 48),
+      (byte) (value >> 56)
+    };
   }
 
   @Override
-  public String transform(String s) {
-    // Strings are immutable so just return it
-    return s;
+  public Long decodeFromBytes(byte[] data) {
+    return 
+            ((long) data[7] << 56)
+            | ((long) data[6] & 0xff) << 48
+            | ((long) data[5] & 0xff) << 40
+            | ((long) data[4] & 0xff) << 32
+            | ((long) data[3] & 0xff) << 24
+            | ((long) data[2] & 0xff) << 16
+            | ((long) data[1] & 0xff) << 8
+            | ((long) data[0] & 0xff)
+       ;
   }
 
   @Override
-  public String name() {
-    return "string";
+  public String getContentType() {
+    return contentType;
   }
 
   @Override
-  public byte systemCodecID() {
-    return 9;
+  public String getContentEncoding() {
+    return null;
   }
+
 }

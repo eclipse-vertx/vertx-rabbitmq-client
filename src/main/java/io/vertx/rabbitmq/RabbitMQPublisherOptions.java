@@ -33,7 +33,6 @@ public class RabbitMQPublisherOptions {
   public static final boolean DEFAULT_RESEND_ON_RECONNECT = false;
 
   private boolean resendOnReconnect = DEFAULT_RESEND_ON_RECONNECT;
-  private String messageCodec;
   
   public RabbitMQPublisherOptions() {
   }
@@ -68,24 +67,6 @@ public class RabbitMQPublisherOptions {
    */
   public RabbitMQPublisherOptions setResendOnReconnect(boolean resendOnReconnect) {
     this.resendOnReconnect = resendOnReconnect;
-    return this;
-  }
-
-  /**
-   * Get the name of the MessageCodec to use for all messages sent on this Publisher.
-   * @return the name of the MessageCodec to use for all messages sent on this Publisher.
-   */
-  public String getMessageCodec() {
-    return messageCodec;
-  }
-
-  /**
-   * Set the name of the MessageCodec to use for all messages sent on this Publisher.
-   * @param messageCodec the name of the MessageCodec to use for all messages sent on this Publisher.
-   * @return this so that the method can be used in a fluent manner.
-   */
-  public RabbitMQPublisherOptions setMessageCodec(String messageCodec) {
-    this.messageCodec = messageCodec;
     return this;
   }
 

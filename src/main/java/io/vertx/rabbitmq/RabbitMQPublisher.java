@@ -23,7 +23,7 @@ import io.vertx.core.Future;
  *
  * @author jtalbut
  */
-public interface RabbitMQPublisher {
+public interface RabbitMQPublisher<T> {
   
   /**
    * Publish a message. 
@@ -35,7 +35,7 @@ public interface RabbitMQPublisher {
    * @see com.rabbitmq.client.Channel#basicPublish(String, String, AMQP.BasicProperties, byte[])
    */
   @GenIgnore(GenIgnore.PERMITTED_TYPE)
-  Future<Void> publish(String routingKey, AMQP.BasicProperties properties, Object body);
+  Future<Void> publish(String routingKey, AMQP.BasicProperties properties, T body);
 
   /**
    * Prevent any future asynchronous behaviour.

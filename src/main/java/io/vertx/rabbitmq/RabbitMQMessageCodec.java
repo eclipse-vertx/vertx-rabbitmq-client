@@ -15,26 +15,20 @@
  */
 package io.vertx.rabbitmq;
 
-import io.vertx.core.Future;
-
 /**
  *
  * @author jtalbut
  */
-public interface RabbitMQConnection {
+public interface RabbitMQMessageCodec<T> {
+
+  public String codecName();
   
-  RabbitMQChannel createChannel();
+  public byte[] encodeToBytes(T value);
+
+  public T decodeFromBytes(byte[] data);
+
+  public String getContentType();
   
-  /**
-   * Returns a strictly increasing identifier of the underlying connection (essentially a number that is incremented each time the connection is reconnected).
-   * @return an identifier of the underlying connection.
-   */
-  long getConnectionInstance();
+  public String getContentEncoding();
   
-  String getConnectionName();
-  
-  Future<Void> close();
-  
-  Future<Void> close(int closeCode, String closeMessage, int timeout);
-    
 }

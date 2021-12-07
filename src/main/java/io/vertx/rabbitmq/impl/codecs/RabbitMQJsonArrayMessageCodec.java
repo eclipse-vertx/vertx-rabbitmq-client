@@ -16,38 +16,38 @@
 package io.vertx.rabbitmq.impl.codecs;
 
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.eventbus.MessageCodec;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
+import io.vertx.rabbitmq.RabbitMQMessageCodec;
 
 /**
  *
  * @author jtalbut
  */
-public class RabbitMQJsonArrayMessageCodec implements MessageCodec<JsonArray, JsonArray> {
+public class RabbitMQJsonArrayMessageCodec implements RabbitMQMessageCodec<JsonArray> {
 
   @Override
-  public void encodeToWire(Buffer buffer, JsonArray jsonArray) {
-    Buffer encoded = jsonArray.toBuffer();
-    buffer.appendBuffer(encoded);
+  public String codecName() {
+    return "jsonArray";
   }
 
   @Override
-  public JsonArray decodeFromWire(int pos, Buffer buffer) {
-    return new JsonArray(buffer);
+  public byte[] encodeToBytes(JsonArray value) {
+    return Json.encodeToBuffer(value).getBytes();
   }
 
   @Override
-  public JsonArray transform(JsonArray jsonArray) {
-    return jsonArray.copy();
+  public JsonArray decodeFromBytes(byte[] data) {
+    return new JsonArray(Buffer.buffer(data));
   }
 
   @Override
-  public String name() {
-    return "jsonarray";
+  public String getContentType() {
+    return "application/json";
   }
 
   @Override
-  public byte systemCodecID() {
-    return 14;
+  public String getContentEncoding() {
+    return null;
   }
 }

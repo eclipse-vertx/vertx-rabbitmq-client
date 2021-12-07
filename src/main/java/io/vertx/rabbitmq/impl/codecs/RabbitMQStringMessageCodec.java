@@ -16,40 +16,50 @@
 package io.vertx.rabbitmq.impl.codecs;
 
 import io.netty.util.CharsetUtil;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.eventbus.MessageCodec;
+import io.vertx.rabbitmq.RabbitMQMessageCodec;
 
 /**
  *
  * @author jtalbut
  */
-public class RabbitMQStringMessageCodec implements MessageCodec<String, String> {
+public class RabbitMQStringMessageCodec implements RabbitMQMessageCodec<String> {
 
+  private final String name;
+  private final String contentType;
+
+  public RabbitMQStringMessageCodec() {
+    this.name = "string";
+    this.contentType = "text/plain";
+  }
+  
+  public RabbitMQStringMessageCodec(String name, String contentType) {
+    this.name = name;
+    this.contentType = contentType;
+  }
+  
   @Override
-  public void encodeToWire(Buffer buffer, String s) {
-    byte[] strBytes = s.getBytes(CharsetUtil.UTF_8);
-    buffer.appendBytes(strBytes);
+  public String codecName() {
+    return name;
   }
 
   @Override
-  public String decodeFromWire(int pos, Buffer buffer) {
-    byte[] bytes = buffer.getBytes();
-    return new String(bytes, CharsetUtil.UTF_8);
+  public byte[] encodeToBytes(String value) {
+    return value.getBytes(CharsetUtil.UTF_8);
   }
 
   @Override
-  public String transform(String s) {
-    // Strings are immutable so just return it
-    return s;
+  public String decodeFromBytes(byte[] data) {
+    return new String(data, CharsetUtil.UTF_8);
   }
 
   @Override
-  public String name() {
-    return "string";
+  public String getContentType() {
+    return contentType;
   }
 
   @Override
-  public byte systemCodecID() {
-    return 9;
+  public String getContentEncoding() {
+    return null;
   }
+
 }

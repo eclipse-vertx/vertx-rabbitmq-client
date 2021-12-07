@@ -16,24 +16,31 @@
 package io.vertx.rabbitmq;
 
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.eventbus.MessageCodec;
 
 /**
  *
  * @author jtalbut
  */
-public class CustomClassCodec implements MessageCodec<CustomClass, CustomClass> {
+public class CustomClassCodec implements RabbitMQMessageCodec<CustomClass> {
 
   @Override
-  public void encodeToWire(Buffer buffer, CustomClass s) {
-    buffer.appendLong(s.getId());
-    buffer.appendInt(s.getTitle().length());
-    buffer.appendString(s.getTitle());
-    buffer.appendDouble(s.getDuration());
+  public String codecName() {
+    return "customClass";
   }
 
   @Override
-  public CustomClass decodeFromWire(int i, Buffer buffer) {
+  public byte[] encodeToBytes(CustomClass value) {
+    Buffer buffer = Buffer.buffer();
+    buffer.appendLong(value.getId());
+    buffer.appendInt(value.getTitle().length());
+    buffer.appendString(value.getTitle());
+    buffer.appendDouble(value.getDuration());
+    return buffer.getBytes();
+  }
+
+  @Override
+  public CustomClass decodeFromBytes(byte[] data) {
+    Buffer buffer = Buffer.buffer(data);
     Long id = buffer.getLong(0);
     int titleLength = buffer.getInt(Long.BYTES);
     String title = buffer.getString(Long.BYTES + Integer.BYTES, Long.BYTES + Integer.BYTES + titleLength);
@@ -41,26 +48,14 @@ public class CustomClassCodec implements MessageCodec<CustomClass, CustomClass> 
     return new CustomClass(id, title, duration);
   }
 
-  /**
-   * This isn't the optimal way to do this (the copy constructor would be more efficient) but it does test the codec better.
-   * @param s The object to the transformed.
-   * @return The object transformed, which should be the same as the original object.
-   */
   @Override
-  public CustomClass transform(CustomClass s) {
-    Buffer buffer = Buffer.buffer();
-    encodeToWire(buffer, s);
-    return decodeFromWire(0, buffer);
+  public String getContentType() {
+    return "application/x-custom-class";
   }
 
   @Override
-  public String name() {
-    return "CustomClassMessageCodec";
-  }
-
-  @Override
-  public byte systemCodecID() {
-    return -1;
+  public String getContentEncoding() {
+    return null;
   }
   
 }
