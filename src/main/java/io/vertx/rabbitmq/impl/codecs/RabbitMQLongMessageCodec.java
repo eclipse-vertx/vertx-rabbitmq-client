@@ -15,6 +15,7 @@
  */
 package io.vertx.rabbitmq.impl.codecs;
 
+import io.netty.util.CharsetUtil;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.MessageCodec;
 
@@ -22,32 +23,33 @@ import io.vertx.core.eventbus.MessageCodec;
  *
  * @author jtalbut
  */
-public class RabbitMQBooleanMessageCodec implements MessageCodec<Boolean, Boolean> {
-
+public class RabbitMQStringMessageCodec implements MessageCodec<String, String> {
 
   @Override
-  public void encodeToWire(Buffer buffer, Boolean b) {
-    buffer.appendByte((byte)(b ? 1 : 0));
+  public void encodeToWire(Buffer buffer, String s) {
+    byte[] strBytes = s.getBytes(CharsetUtil.UTF_8);
+    buffer.appendBytes(strBytes);
   }
 
   @Override
-  public Boolean decodeFromWire(int pos, Buffer buffer) {
-    return buffer.getByte(pos) != 0;
+  public String decodeFromWire(int pos, Buffer buffer) {
+    byte[] bytes = buffer.getBytes();
+    return new String(bytes, CharsetUtil.UTF_8);
   }
 
   @Override
-  public Boolean transform(Boolean b) {
-    // Booleans are immutable so just return it
-    return b;
+  public String transform(String s) {
+    // Strings are immutable so just return it
+    return s;
   }
 
   @Override
   public String name() {
-    return "boolean";
+    return "string";
   }
 
   @Override
   public byte systemCodecID() {
-    return 3;
+    return 9;
   }
 }
