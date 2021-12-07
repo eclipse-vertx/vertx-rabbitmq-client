@@ -29,12 +29,11 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.eventbus.MessageCodec;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
+import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
@@ -57,7 +56,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   private final Vertx vertx;
   private final RabbitMQConnectionImpl connection;
   private final Context context;
-  private final CodecManager codecManager;
+  private final RabbitMQCodecManager codecManager;
   
   private volatile String channelId;
   
@@ -77,10 +76,10 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     this.connection = connection;
     this.retries = options.getReconnectAttempts();
     this.context = vertx.getOrCreateContext();
-    this.codecManager = connection.getCodecManager();
+    this.codecManager = new RabbitMQCodecManager();
   }
 
-  public CodecManager getCodecManager() {
+  public RabbitMQCodecManager getCodecManager() {
     return codecManager;
   }
   
@@ -104,8 +103,13 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options) {
-    return new RabbitMQPublisherImpl(vertx, this, exchange, options);
+  public RabbitMQPublisher<Object> createPublisher(String exchange, RabbitMQPublisherOptions options) {
+    return this.<Object>createPublisher(null, exchange, options);
+  }
+
+  @Override
+  public <T> RabbitMQPublisher<T> createPublisher(RabbitMQMessageCodec<T> codec, String exchange, RabbitMQPublisherOptions options) {
+    return new RabbitMQPublisherImpl(vertx, this, codec, exchange, options);
   }
 
   @Override
@@ -275,19 +279,6 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     });
     
   }
-  
-  byte[] convertBody(Object body, String codecName) {
-    if (body instanceof byte[]) {
-      return (byte[]) body;
-    } else if (body instanceof Buffer) {
-      return ((Buffer) body).getBytes();
-    } else {
-      MessageCodec codec = codecManager.lookupCodec(body, codecName);
-      Buffer buffer = Buffer.buffer();
-      codec.encodeToWire(buffer, body);
-      return buffer.getBytes();
-    }
-  }
 
   @Override
   public Future<Void> basicPublish(RabbitMQPublishOptions options, String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, Object body) {
@@ -300,6 +291,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
      * 
      * Synchronizing is necessary because this introduces a race condition in the generation of the delivery tag.
      */
+    String codecName = options == null ? null : options.getCodec();
     try {
       Channel channel = createLock.get();
       if (!confirmSelected && channel != null && channel.isOpen()) {
@@ -308,7 +300,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
             long deliveryTag = channel.getNextPublishSeqNo();
             options.getDeliveryTagHandler().handle(deliveryTag);
           }
-          channel.basicPublish(exchange, routingKey, mandatory, props, convertBody(body, options == null ? null : options.getCodec()));
+          channel.basicPublish(exchange, routingKey, mandatory, props, codecManager.convertBody(body, codecName));
           return Future.succeededFuture();
         }
       }
@@ -329,7 +321,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
           long deliveryTag = channel.getNextPublishSeqNo();
           options.getDeliveryTagHandler().handle(deliveryTag);
         }
-        channel.basicPublish(exchange, routingKey, mandatory, props, convertBody(body, options == null ? null : options.getCodec()));
+        channel.basicPublish(exchange, routingKey, mandatory, props, codecManager.convertBody(body, codecName));
         if (waitForConfirms) {
           channel.waitForConfirms();
         }
@@ -402,6 +394,32 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
       }
     });
   }
+
+  @Override
+  public <T> RabbitMQChannel registerCodec(RabbitMQMessageCodec<T> codec) {
+    codecManager.registerCodec(codec);
+    return this;
+  }
+
+  @Override
+  public <T> RabbitMQChannel unregisterCodec(String name) {
+    codecManager.unregisterCodec(name);
+    return this;
+  }
+
+  @Override
+  public <T> RabbitMQChannel registerDefaultCodec(Class<T> clazz, RabbitMQMessageCodec<T> codec) {
+    codecManager.registerDefaultCodec(clazz, codec);
+    return this;
+  }
+
+  @Override
+  public <T> RabbitMQChannel unregisterDefaultCodec(Class<T> clazz) {
+    codecManager.unregisterDefaultCodec(clazz);
+    return this;
+  }
+  
+  
   
   
 }

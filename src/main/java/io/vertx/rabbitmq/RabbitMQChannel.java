@@ -92,8 +92,18 @@ public interface RabbitMQChannel {
    * @param options Options for configuring the publisher.
    * @return a RabbitMQPublisher on this channel that reliably sends messages.
    */
-  RabbitMQPublisher createPublisher(String exchange, RabbitMQPublisherOptions options);
+  RabbitMQPublisher<Object> createPublisher(String exchange, RabbitMQPublisherOptions options);
       
+  /**
+   * Creates a RabbitMQPublisher on this channel that reliably sends messages.
+   * @param <T> The type of data that will be passed in to the Publisher.
+   * @param codec The codec that will be used to encode the messages passed in to the Publisher.
+   * @param exchange The exchange that messages are to be sent to.
+   * @param options Options for configuring the publisher.
+   * @return a RabbitMQPublisher on this channel that reliably sends messages.
+   */
+  <T> RabbitMQPublisher<T> createPublisher(RabbitMQMessageCodec<T> codec, String exchange, RabbitMQPublisherOptions options);
+
   /**
    * Create a RabbitMQConsumer on this channel that reliably receives messages.
    * @param queue The queue that messages are being pushed from.
@@ -208,5 +218,39 @@ public interface RabbitMQChannel {
   Future<Void> close();
   
   Future<Void> close(int closeCode, String closeMessage);
+    
+  /**
+   * Register a message codec.
+   * 
+   * You can register a message codec if you want to send any non standard message to the broker. E.g. you might want to send POJOs directly to the broker.
+   * 
+   * The MessageCodecs used by the RabbitMQ client are compatible with those used by the Vert.x EventBus
+   * , but there are some differences that mean the default implementations are not the same implementations for both:
+   * 
+   * <ul>
+   * <li>The EventBus codecs are natively working with a Buffer that may contain more bytes than the message being processed
+   * RabbitMQ messages are natively considered to be byte arrays, so the Buffer seen by a codec is guaranteed to only be used for that purpose.
+   * <li>EventBus messages are only ever seen by Vert.x clients.
+   * RabbitMQ messages are written by other processes that could have nothing to do with Vert.x.
+   * </ul>
+   * 
+   * The result of these differences is that the RabbitMQ JSON codecs cannot prefix the JSON data with a length value (as the Event Bus Json MessageCodecs do), because that is not
+   * useful and is not the expected behaviour when handling JSON data in a RabbitMQ message.
+   * 
+   * Most of the message codecs for base types are the same (i.e. this library uses the EventBus MessageCodecs for most base types)
+   * , however the logic of the RabbitMQ Boolean MessageCodec is the inverse of the Event Bus Boolean Message Codec - the Rabbit MQ codec uses 1 for true and 0 for false.
+   * RabbitMQ messages tend not to consist of just a single base value, but they can (as long as the recipient expects big-endian values).
+   * 
+   * @param <T> The type that the codec can encode and decode.
+   * @param codec the message codec to register
+   * @return a reference to this, so the API can be used fluently
+   */
+  <T> RabbitMQChannel registerCodec(RabbitMQMessageCodec<T> codec);
+  
+  <T> RabbitMQChannel unregisterCodec(String name);
+  
+  <T> RabbitMQChannel registerDefaultCodec(Class<T> clazz, RabbitMQMessageCodec<T> codec);
+  
+  <T> RabbitMQChannel unregisterDefaultCodec(Class<T> clazz);
     
 }

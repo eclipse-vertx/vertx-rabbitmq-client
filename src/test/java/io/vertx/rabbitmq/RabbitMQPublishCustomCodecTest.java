@@ -65,7 +65,7 @@ public class RabbitMQPublishCustomCodecTest {
   private Promise<byte[]> lastMessage;
 
   private RabbitMQChannel pubChannel;
-  private RabbitMQPublisher publisher;
+  private RabbitMQPublisher<CustomClass> publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
 
@@ -91,7 +91,6 @@ public class RabbitMQPublishCustomCodecTest {
   @Before
   public void setup() throws Exception {
     this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
-    connection.registerCodec(new CustomClassCodec());    
   }
   
   private static final byte[] HEX_ARRAY = "0123456789ABCDEF".getBytes(StandardCharsets.US_ASCII);
@@ -105,7 +104,7 @@ public class RabbitMQPublishCustomCodecTest {
       return new String(hexChars, StandardCharsets.UTF_8);
   }
 
-  private Future<Void> testTransfer(String name, Object send, byte[] required) {
+  private Future<Void> testTransfer(String name, CustomClass send, byte[] required) {
     lastMessage = Promise.promise();
     return publisher.publish("", new AMQP.BasicProperties(), send)
             .compose(v -> {
@@ -125,7 +124,7 @@ public class RabbitMQPublishCustomCodecTest {
   public void testCustomClassCodec() {
     CustomClassCodec codec = new CustomClassCodec();
     CustomClass value = new CustomClass(17L, "Seventeen", 2.345);
-    CustomClass transformed = codec.transform(value);
+    CustomClass transformed = codec.decodeFromBytes(codec.encodeToBytes(value));
     assertEquals(value.getId(), transformed.getId());
     assertEquals(value.getTitle(), transformed.getTitle());
     assertEquals(value.getDuration(), transformed.getDuration(), 0.001);
@@ -151,16 +150,18 @@ public class RabbitMQPublishCustomCodecTest {
 
   private void createPublisher() {
     pubChannel = connection.createChannel();
+    pubChannel.registerCodec(new CustomClassCodec());    
 
     pubChannel.addChannelEstablishedCallback(p -> {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .onComplete(p);
     });
-    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions().setMessageCodec("CustomClassMessageCodec"));
+    publisher = pubChannel.createPublisher(new CustomClassCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions());
   }
 
   private void createConsumer() {
     conChannel = connection.createChannel();
+    conChannel.registerCodec(new CustomClassCodec());    
     conChannel.addChannelEstablishedCallback(p -> {
       conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))

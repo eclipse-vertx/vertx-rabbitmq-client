@@ -21,10 +21,10 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQStringMessageCodec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
@@ -80,7 +80,7 @@ public class RabbitMQClientReconnectTest {
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
   private RabbitMQChannel pubChannel;
-  private RabbitMQPublisher publisher;
+  private RabbitMQPublisher<String> publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   
@@ -164,7 +164,7 @@ public class RabbitMQClientReconnectTest {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .onComplete(p);
     });
-    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
+    publisher = pubChannel.createPublisher(new RabbitMQStringMessageCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions());
     AtomicLong counter = new AtomicLong();
     AtomicLong postShutdownCount = new AtomicLong(20);
     AtomicLong timerId = new AtomicLong();
@@ -177,7 +177,7 @@ public class RabbitMQClientReconnectTest {
     timerId.set(vertx.setPeriodic(200, v -> {
       long value = counter.incrementAndGet();
       logger.info("Publishing message {}", value);
-      publisher.publish("", new BasicProperties(), Buffer.buffer(Long.toString(value)));
+      publisher.publish("", new BasicProperties(), Long.toString(value));
       if (hasShutdown.get()) {
         messageSentAfterShutdown.tryComplete();
         if (postShutdownCount.decrementAndGet() == 0) {

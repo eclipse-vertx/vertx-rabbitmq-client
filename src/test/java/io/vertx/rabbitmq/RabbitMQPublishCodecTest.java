@@ -68,7 +68,7 @@ public class RabbitMQPublishCodecTest {
   private Promise<byte[]> lastMessage;
 
   private RabbitMQChannel pubChannel;
-  private RabbitMQPublisher publisher;
+  private RabbitMQPublisher<Object> publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
 
@@ -165,17 +165,7 @@ public class RabbitMQPublishCodecTest {
 
     createPublisher();
     createConsumer();
-    testTransfer("Long", 1L, longToBytes(1L))
-            .compose(v -> testTransfer("Int", 123, intToBytes(123)))
-            .compose(v -> testTransfer("Short", (short) 123, shortToBytes((short) 123)))
-            .compose(v -> testTransfer("Boolean - True", true, new byte[]{1}))
-            .compose(v -> testTransfer("Boolean - False", false, new byte[]{0}))
-            .compose(v -> testTransfer("Double", 1.234, doubleToBytes(1.234)))
-            .compose(v -> testTransfer("Float", 5.678F, floatToBytes(5.678F)))
-            .compose(v -> testTransfer("String", "Hello", "Hello".getBytes(StandardCharsets.UTF_8)))
-            .compose(v -> testTransfer("Character", 'Q', charToBytes('Q')))
-            .compose(v -> testTransfer("Character - Unicode", '£', charToBytes('£')))
-            .compose(v -> testTransfer("Byte", (byte) 123, new byte[]{123}))
+    testTransfer("String", "Hello", "Hello".getBytes(StandardCharsets.UTF_8))
             .compose(v -> testTransfer("Null", null, new byte[0]))
             .compose(v -> {
               Buffer buf = Buffer.buffer("This is my buffer");              

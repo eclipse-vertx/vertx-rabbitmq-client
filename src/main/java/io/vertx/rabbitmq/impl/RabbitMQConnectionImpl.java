@@ -28,7 +28,6 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.eventbus.MessageCodec;
 import io.vertx.core.net.JksOptions;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
@@ -74,13 +73,11 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   
   private final AtomicLong connectCount = new AtomicLong();
   private volatile boolean closed;
-  private final CodecManager codecManager;
   
   public RabbitMQConnectionImpl(Vertx vertx, RabbitMQOptions config) {
     this.vertx = vertx;
     this.context = vertx.getOrCreateContext();    
     this.config = new RabbitMQOptions(config);
-    this.codecManager = new CodecManager();
   }
 
   @Override
@@ -467,32 +464,4 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     return close(AMQP.REPLY_SUCCESS, "OK", config.getHandshakeTimeout());
   }
 
-  public CodecManager getCodecManager() {
-    return codecManager;
-  }
-  
-  @Override
-  public <T> RabbitMQConnection registerCodec(MessageCodec<T, ?> codec) {
-    codecManager.registerCodec(codec);
-    return this;
-  }
-
-  @Override
-  public <T> RabbitMQConnection unregisterCodec(String name) {
-    codecManager.unregisterCodec(name);
-    return this;
-  }
-
-  @Override
-  public <T> RabbitMQConnection registerDefaultCodec(Class<T> clazz, MessageCodec<T, ?> codec) {
-    codecManager.registerDefaultCodec(clazz, codec);
-    return this;
-  }
-
-  @Override
-  public <T> RabbitMQConnection unregisterDefaultCodec(Class<T> clazz) {
-    codecManager.unregisterDefaultCodec(clazz);
-    return this;
-  }
-  
 }

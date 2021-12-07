@@ -21,7 +21,6 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
@@ -34,7 +33,6 @@ import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,6 +44,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import io.vertx.rabbitmq.RabbitMQPublisher;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQLongMessageCodec;
 
 /**
  *
@@ -86,7 +85,7 @@ public class RabbitMQFuturePublisherImplTest {
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
   private RabbitMQChannel pubChannel;
-  private RabbitMQPublisher publisher;
+  private RabbitMQPublisher<Long> publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   
@@ -162,7 +161,7 @@ public class RabbitMQFuturePublisherImplTest {
                 }
               });
     });
-    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
+    publisher = pubChannel.createPublisher(new RabbitMQLongMessageCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions());
     AtomicLong counter = new AtomicLong();
     AtomicLong postCount = new AtomicLong(20);
     AtomicLong timerId = new AtomicLong();
@@ -173,7 +172,7 @@ public class RabbitMQFuturePublisherImplTest {
     timerId.set(vertx.setPeriodic(100, v -> {
       long value = counter.incrementAndGet();
       logger.info("Publishing message {}", value);
-      publisher.publish("", new AMQP.BasicProperties(), Buffer.buffer(Long.toString(value)))
+      publisher.publish("", new AMQP.BasicProperties(), value)
               .onComplete(ar -> {
                 if (ar.succeeded()) {
                   logger.info("Published message {}", value);
@@ -201,7 +200,7 @@ public class RabbitMQFuturePublisherImplTest {
     
     consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
     consumer.handler(message -> {
-      Long index = Long.parseLong(message.body().toString(StandardCharsets.UTF_8));
+      Long index = message.body().getLong(0);
       synchronized(receivedMessages) {
         receivedMessages.add(index);
         logger.info("Received message: {} (have {})", index, receivedMessages.size());

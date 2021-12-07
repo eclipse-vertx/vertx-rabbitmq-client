@@ -78,7 +78,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
   private RabbitMQChannel pubChannel;
-  private RabbitMQPublisher publisher;
+  private RabbitMQPublisher<Object> publisher;
   private RabbitMQChannel conChannel;
   private RabbitMQConsumer consumer;
   
