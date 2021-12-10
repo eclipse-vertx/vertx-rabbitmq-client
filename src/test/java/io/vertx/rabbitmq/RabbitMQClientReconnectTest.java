@@ -26,7 +26,6 @@ import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQStringMessageCodec;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -82,7 +81,7 @@ public class RabbitMQClientReconnectTest {
   private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<String> publisher;
   private RabbitMQChannel conChannel;
-  private RabbitMQConsumer consumer;
+  private RabbitMQConsumer<String> consumer;
   
   public RabbitMQClientReconnectTest() throws IOException {
     logger.info("Constructing");
@@ -201,9 +200,9 @@ public class RabbitMQClientReconnectTest {
       hasShutdown.set(true);
     });
     
-    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
+    consumer = conChannel.createConsumer(new RabbitMQStringMessageCodec(), TEST_QUEUE, new RabbitMQConsumerOptions());
     consumer.handler(message -> {
-      Long index = Long.parseLong(message.body().toString(StandardCharsets.UTF_8));
+      Long index = Long.parseLong(message.body());
       synchronized(receivedMessages) {
         receivedMessages.add(index);
         if (receivedMessages.size() > 5) {

@@ -111,7 +111,18 @@ public interface RabbitMQChannel {
    * @return a RabbitMQConsumer on this channel that can reliably receives messages.
    * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
    */
-  RabbitMQConsumer createConsumer(String queue, RabbitMQConsumerOptions options);
+  RabbitMQConsumer<byte[]> createConsumer(String queue, RabbitMQConsumerOptions options);
+  
+  /**
+   * Create a RabbitMQConsumer on this channel that reliably receives messages.
+   * @param <T> The type of data that will be received by the Consumer.
+   * @param codec The codec that will be used to decode the messages received by the Consumer.
+   * @param queue The queue that messages are being pushed from.
+   * @param options Options for configuring the consumer.
+   * @return a RabbitMQConsumer on this channel that can reliably receives messages.
+   * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
+   */
+  <T> RabbitMQConsumer<T> createConsumer(RabbitMQMessageCodec<T> codec, String queue, RabbitMQConsumerOptions options);
   
   Future<Void> addConfirmHandler(Handler<RabbitMQConfirmation> confirmListener);
   

@@ -44,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import io.vertx.rabbitmq.RabbitMQPublisher;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
 
 /**
  *
@@ -113,9 +114,13 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public RabbitMQConsumer createConsumer(String queue, RabbitMQConsumerOptions options) {
-    RabbitMQConsumerImpl consumer = new RabbitMQConsumerImpl(vertx, vertx.getOrCreateContext(), this, queue, options);    
-    return consumer;
+  public RabbitMQConsumer<byte[]> createConsumer(String queue, RabbitMQConsumerOptions options) {
+    return createConsumer(new RabbitMQByteArrayMessageCodec(), queue, options);
+  }
+
+  @Override
+  public <T> RabbitMQConsumer<T> createConsumer(RabbitMQMessageCodec<T> codec, String queue, RabbitMQConsumerOptions options) {
+    return new RabbitMQConsumerImpl(vertx, vertx.getOrCreateContext(), this, codec, queue, options);    
   }
 
   @Override

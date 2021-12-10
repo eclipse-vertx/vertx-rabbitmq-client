@@ -70,7 +70,7 @@ public class RabbitMQPublishCodecTest {
   private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<Object> publisher;
   private RabbitMQChannel conChannel;
-  private RabbitMQConsumer consumer;
+  private RabbitMQConsumer<byte[]> consumer;
 
   public RabbitMQPublishCodecTest() throws IOException {
     logger.info("Constructing");
@@ -214,7 +214,7 @@ public class RabbitMQPublishCodecTest {
     });
     consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
     consumer.handler(message -> {
-      lastMessage.complete(message.body().getBytes());
+      lastMessage.complete(message.body());
     });
     consumer.consume(true, null);
   }

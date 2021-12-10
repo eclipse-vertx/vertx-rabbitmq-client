@@ -26,7 +26,6 @@ import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -62,12 +61,12 @@ public class RabbitMQPublishCustomCodecTest {
   private final Vertx vertx;
   private RabbitMQConnection connection;
 
-  private Promise<byte[]> lastMessage;
+  private Promise<CustomClass> lastMessage;
 
   private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<CustomClass> publisher;
   private RabbitMQChannel conChannel;
-  private RabbitMQConsumer consumer;
+  private RabbitMQConsumer<CustomClass> consumer;
 
   public RabbitMQPublishCustomCodecTest() throws IOException {
     logger.info("Constructing");
@@ -104,18 +103,18 @@ public class RabbitMQPublishCustomCodecTest {
       return new String(hexChars, StandardCharsets.UTF_8);
   }
 
-  private Future<Void> testTransfer(String name, CustomClass send, byte[] required) {
+  private Future<Void> testTransfer(String name, CustomClass send, CustomClass required) {
     lastMessage = Promise.promise();
     return publisher.publish("", new AMQP.BasicProperties(), send)
             .compose(v -> {
               return lastMessage.future();
             })
-            .compose(bytes -> {
-              if (Arrays.equals(required, bytes)) {
+            .compose(received -> {
+              if (required.toString().equals(received.toString())) {
                 return Future.succeededFuture();
               } else {
-                logger.debug("{}: {} != {}", name, bytes, required);
-                return Future.failedFuture(name +": " + bytesToHex(bytes) + " != " + bytesToHex(required));
+                logger.debug("{}: {} != {}", name, received, required);
+                return Future.failedFuture(name +": " + received + " != " + required);
               }
             });
   }
@@ -136,9 +135,7 @@ public class RabbitMQPublishCustomCodecTest {
 
     createPublisher();
     createConsumer();
-    testTransfer("CustomClass", new CustomClass(19L, "random", 27.435), 
-            new byte[]{0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 6, 114, 97, 110, 100, 111, 109, 64, 59, 111, 92, 40, -11, -62, -113}
-            )
+    testTransfer("CustomClass", new CustomClass(19L, "random", 27.435), new CustomClass(19L, "random", 27.435))
             .onFailure(ex -> {
               ctx.fail(ex);
             })
@@ -168,9 +165,9 @@ public class RabbitMQPublishCustomCodecTest {
               .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
               .onComplete(p);
     });
-    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
+    consumer = conChannel.createConsumer(new CustomClassCodec(), TEST_QUEUE, new RabbitMQConsumerOptions());
     consumer.handler(message -> {
-      lastMessage.complete(message.body().getBytes());
+      lastMessage.complete(message.body());
     });
     consumer.consume(true, null);
   }

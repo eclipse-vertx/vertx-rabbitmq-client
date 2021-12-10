@@ -31,6 +31,7 @@ import io.vertx.core.streams.impl.InboundBuffer;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQMessage;
+import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,7 +40,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @author jtalbut
  */
-public class RabbitMQConsumerImpl implements RabbitMQConsumer {
+public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
 
   private static final Logger log = LoggerFactory.getLogger(RabbitMQConsumerImpl.class);
 
@@ -52,7 +53,7 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
   private String queueName;  
   private volatile String consumerTag;
   private final boolean keepMostRecent;
-  private final InboundBuffer<RabbitMQMessage> pending;
+  private final InboundBuffer<RabbitMQMessage<T>> pending;
   private final int maxQueueSize;
   private volatile boolean cancelled;
   private final long reconnectInterval;
@@ -60,8 +61,9 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
   private final AtomicLong consumeCount = new AtomicLong();
   private Map<String, Object> arguments;
   private final ConsumerBridge bridge;
+  private final RabbitMQMessageCodec<T> messageCodec;
 
-  public RabbitMQConsumerImpl(Vertx vertx, Context vertxContext, RabbitMQChannelImpl channel, String queueName, RabbitMQConsumerOptions options) {
+  public RabbitMQConsumerImpl(Vertx vertx, Context vertxContext, RabbitMQChannelImpl channel, RabbitMQMessageCodec<T> messageCodec, String queueName, RabbitMQConsumerOptions options) {
     this.channel = channel;
 
     this.vertx = vertx;
@@ -73,6 +75,7 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
     this.queueName = queueName;    
     this.reconnectInterval = options.getReconnectInterval();
     this.bridge = new ConsumerBridge();
+    this.messageCodec = messageCodec;
   }
   
   private class ConsumerBridge implements Consumer {
@@ -111,7 +114,9 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
     @Override
     public void handleDelivery(String tag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
       log.info("Got message: " + new String(body));
-      RabbitMQMessage msg = new RabbitMQMessageImpl(body, tag, envelope, properties, null);
+      RabbitMQMessage<T> msg;
+      T value = messageCodec.decodeFromBytes(body);
+      msg = new RabbitMQMessageImpl<T>(value, tag, envelope, properties, null);
       vertxContext.runOnContext(v -> handleMessage(msg));
     }    
   }
@@ -151,19 +156,19 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
   }
 
   @Override
-  public RabbitMQConsumer setQueueName(String name) {
+  public RabbitMQConsumer<T> setQueueName(String name) {
     this.queueName = name;
     return this;
   }
 
   @Override
-  public RabbitMQConsumer exceptionHandler(Handler<Throwable> exceptionHandler) {
+  public RabbitMQConsumer<T> exceptionHandler(Handler<Throwable> exceptionHandler) {
     this.exceptionHandler = exceptionHandler;
     return this;
   }
 
   @Override
-  public RabbitMQConsumer handler(Handler<RabbitMQMessage> handler) {
+  public RabbitMQConsumer<T> handler(Handler<RabbitMQMessage<T>> handler) {
     if (handler != null) {
       pending.handler(msg -> {
         try {
@@ -179,25 +184,25 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
   }
 
   @Override
-  public RabbitMQConsumer pause() {
+  public RabbitMQConsumer<T> pause() {
     pending.pause();
     return this;
   }
 
   @Override
-  public RabbitMQConsumer resume() {
+  public RabbitMQConsumer<T> resume() {
     pending.resume();
     return this;
   }
 
   @Override
-  public RabbitMQConsumer fetch(long amount) {
+  public RabbitMQConsumer<T> fetch(long amount) {
     pending.fetch(amount);
     return this;
   }
 
   @Override
-  public RabbitMQConsumer endHandler(Handler<Void> endHandler) {
+  public RabbitMQConsumer<T> endHandler(Handler<Void> endHandler) {
     this.endHandler = endHandler;
     return this;
   }
@@ -244,7 +249,7 @@ public class RabbitMQConsumerImpl implements RabbitMQConsumer {
    *
    * @param message received message to deliver
    */
-  private void handleMessage(RabbitMQMessage message) {
+  private void handleMessage(RabbitMQMessage<T> message) {
 
     if (pending.size() >= maxQueueSize) {
       if (keepMostRecent) {

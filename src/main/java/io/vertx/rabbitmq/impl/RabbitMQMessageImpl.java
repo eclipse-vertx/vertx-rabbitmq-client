@@ -18,12 +18,11 @@ package io.vertx.rabbitmq.impl;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.BasicProperties;
 import com.rabbitmq.client.Envelope;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.rabbitmq.RabbitMQMessage;
 
-public class RabbitMQMessageImpl implements RabbitMQMessage {
+public class RabbitMQMessageImpl<T> implements RabbitMQMessage<T> {
 
-  private Buffer body;
+  private T body;
   private String consumerTag;
   private Envelope envelope;
   private BasicProperties properties;
@@ -37,8 +36,8 @@ public class RabbitMQMessageImpl implements RabbitMQMessage {
    * @param properties  content header data for the message
    * @param body        the message body (opaque, client-specific byte array)
    */
-  RabbitMQMessageImpl(byte[] body, String consumerTag, com.rabbitmq.client.Envelope envelope, AMQP.BasicProperties properties, Integer messageCount) {
-    this.body = Buffer.buffer(body);
+  RabbitMQMessageImpl(T body, String consumerTag, com.rabbitmq.client.Envelope envelope, AMQP.BasicProperties properties, Integer messageCount) {
+    this.body = body;
     this.consumerTag = consumerTag;
     this.envelope = envelope;
     this.properties = properties;
@@ -46,7 +45,7 @@ public class RabbitMQMessageImpl implements RabbitMQMessage {
   }
 
   @Override
-  public Buffer body() {
+  public T body() {
     return body;
   }
 

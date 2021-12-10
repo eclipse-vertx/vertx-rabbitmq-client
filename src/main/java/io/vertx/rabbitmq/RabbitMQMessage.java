@@ -21,19 +21,18 @@ import io.vertx.codegen.annotations.CacheReturn;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.Handler;
-import io.vertx.core.buffer.Buffer;
 
 /**
  * Represent a message received message received in a rabbitmq-queue.
  */
 @VertxGen
-public interface RabbitMQMessage {
+public interface RabbitMQMessage<T> {
   
   /**
    * @return the message body
    */
   @CacheReturn
-  Buffer body();
+  T body();
 
   /**
    * @return the <i>consumer tag</i> associated with the consumer

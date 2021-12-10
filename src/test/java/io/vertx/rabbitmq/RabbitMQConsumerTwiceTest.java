@@ -23,7 +23,6 @@ import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -58,7 +57,7 @@ public class RabbitMQConsumerTwiceTest {
   private RabbitMQConnection connection;
 
   private RabbitMQChannel conChannel;
-  private RabbitMQConsumer consumer;
+  private RabbitMQConsumer<byte[]> consumer;
   
   public RabbitMQConsumerTwiceTest() throws IOException {
     logger.info("Constructing");
@@ -130,7 +129,6 @@ public class RabbitMQConsumerTwiceTest {
     
     consumer = channel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
     consumer.handler(message -> {
-      Long index = Long.parseLong(message.body().toString(StandardCharsets.UTF_8));
       channel.basicAck(message.consumerTag(), message.envelope().getDeliveryTag(), false);
     });
     return consumer.consume(false, null)

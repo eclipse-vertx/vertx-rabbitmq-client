@@ -27,7 +27,7 @@ import java.util.Map;
  * A stream of messages from a rabbitmq queue.
  */
 @VertxGen
-public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
+public interface RabbitMQConsumer<T> extends ReadStream<RabbitMQMessage<T>> {
 
   /**
    * Begin consuming from the queue.
@@ -55,7 +55,7 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    * @return a reference to this, so the API can be used fluently
    */
   @Override
-  RabbitMQConsumer exceptionHandler(Handler<Throwable> exceptionHandler);
+  RabbitMQConsumer<T> exceptionHandler(Handler<Throwable> exceptionHandler);
 
   /**
    * Set a message handler. As message appear in a queue, the handler will be called with the message.
@@ -63,7 +63,7 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    * @return a reference to this, so the API can be used fluently
    */
   @Override
-  RabbitMQConsumer handler(Handler<RabbitMQMessage> messageArrived);
+  RabbitMQConsumer<T> handler(Handler<RabbitMQMessage<T>> messageArrived);
 
   /**
    * Pause the stream of incoming messages from queue.
@@ -74,7 +74,7 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    * @return a reference to this, so the API can be used fluently
    */
   @Override
-  RabbitMQConsumer pause();
+  RabbitMQConsumer<T> pause();
 
   /**
    * Resume reading from a queue. Flushes internal queue.
@@ -82,7 +82,7 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    * @return a reference to this, so the API can be used fluently
    */
   @Override
-  RabbitMQConsumer resume();
+  RabbitMQConsumer<T> resume();
 
   /**
    * Set an end handler. Once the stream has cancelled successfully, the handler will be called.
@@ -90,7 +90,7 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    * @return a reference to this, so the API can be used fluently
    */
   @Override
-  RabbitMQConsumer endHandler(Handler<Void> endHandler);
+  RabbitMQConsumer<T> endHandler(Handler<Void> endHandler);
 
   /**
    * @return the name of the queue
@@ -104,7 +104,7 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  RabbitMQConsumer setQueueName(String name);
+  RabbitMQConsumer<T> setQueueName(String name);
   
   /**
    * @return a consumer tag
@@ -147,6 +147,6 @@ public interface RabbitMQConsumer extends ReadStream<RabbitMQMessage> {
    *
    * @return a reference to this, so the API can be used fluently
    */
-  RabbitMQConsumer fetch(long amount);
+  RabbitMQConsumer<T> fetch(long amount);
   
 }

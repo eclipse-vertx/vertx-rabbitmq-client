@@ -80,7 +80,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<Object> publisher;
   private RabbitMQChannel conChannel;
-  private RabbitMQConsumer consumer;
+  private RabbitMQConsumer<byte[]> consumer;
   
   public RabbitMQClientBuiltinRecoveryTest() throws IOException {
     logger.info("Constructing");
@@ -204,7 +204,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
     
     consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions().setReconnectInterval(0));
     consumer.handler(message -> {
-      String body = message.body().toString(StandardCharsets.UTF_8);
+      String body = new String(message.body(), StandardCharsets.UTF_8);
       synchronized(receivedMessages) {
         receivedMessages.add(body);
         if (receivedMessages.size() > 5) {

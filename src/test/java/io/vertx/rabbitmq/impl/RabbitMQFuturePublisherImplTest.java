@@ -87,7 +87,7 @@ public class RabbitMQFuturePublisherImplTest {
   private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<Long> publisher;
   private RabbitMQChannel conChannel;
-  private RabbitMQConsumer consumer;
+  private RabbitMQConsumer<Long> consumer;
   
   public RabbitMQFuturePublisherImplTest() throws IOException {
     logger.info("Constructing");
@@ -198,9 +198,9 @@ public class RabbitMQFuturePublisherImplTest {
               .onComplete(p);
     });
     
-    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
+    consumer = conChannel.createConsumer(new RabbitMQLongMessageCodec(), TEST_QUEUE, new RabbitMQConsumerOptions());
     consumer.handler(message -> {
-      Long index = message.body().getLong(0);
+      Long index = message.body();
       synchronized(receivedMessages) {
         receivedMessages.add(index);
         logger.info("Received message: {} (have {})", index, receivedMessages.size());
