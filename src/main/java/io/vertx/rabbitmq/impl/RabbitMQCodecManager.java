@@ -12,12 +12,15 @@
 package io.vertx.rabbitmq.impl;
 
 import io.vertx.core.buffer.Buffer;
-import io.vertx.rabbitmq.impl.codecs.RabbitMQStringMessageCodec;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQBufferMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQJsonArrayMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQJsonObjectMessageCodec;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQNullMessageCodec;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQStringMessageCodec;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,6 +32,9 @@ import java.util.concurrent.ConcurrentMap;
 public class RabbitMQCodecManager {
 
   // The standard message codecs
+  public static final RabbitMQMessageCodec<byte[]> BYTE_ARRAY_MESSAGE_CODEC = new RabbitMQByteArrayMessageCodec();
+  public static final RabbitMQMessageCodec<Buffer> BUFFER_MESSAGE_CODEC = new RabbitMQBufferMessageCodec();
+  public static final RabbitMQMessageCodec<Object> NULL_MESSAGE_CODEC = new RabbitMQNullMessageCodec();
   public static final RabbitMQMessageCodec<String> STRING_MESSAGE_CODEC = new RabbitMQStringMessageCodec();
   public static final RabbitMQMessageCodec<JsonObject> JSON_OBJECT_MESSAGE_CODEC = new RabbitMQJsonObjectMessageCodec();
   public static final RabbitMQMessageCodec<JsonArray> JSON_ARRAY_MESSAGE_CODEC = new RabbitMQJsonArrayMessageCodec();
@@ -36,26 +42,19 @@ public class RabbitMQCodecManager {
   private final ConcurrentMap<String, RabbitMQMessageCodec> userCodecMap = new ConcurrentHashMap<>();
   private final ConcurrentMap<Class, RabbitMQMessageCodec> defaultCodecMap = new ConcurrentHashMap<>();
 
-  public byte[] convertBody(Object body, String codecName) {
-    if (body instanceof byte[]) {
-      return (byte[]) body;
-    } else if (body instanceof Buffer) {
-      return ((Buffer) body).getBytes();
-    } else if (body == null) {
-      return new byte[0];
-    } else {
-      RabbitMQMessageCodec codec = lookupCodec(body, codecName);
-      return codec.encodeToBytes(body);
-    }
-  }
-  
-  private RabbitMQMessageCodec lookupCodec(Object body, String codecName) {
+  public RabbitMQMessageCodec lookupCodec(Object body, String codecName) {
     RabbitMQMessageCodec codec;
     if (codecName != null) {
       codec = userCodecMap.get(codecName);
       if (codec == null) {
         throw new IllegalArgumentException("No message codec for name: " + codecName);
       }
+    } else if (body instanceof byte[]) {
+      codec = BYTE_ARRAY_MESSAGE_CODEC;
+    } else if (body instanceof Buffer) {
+      codec = BUFFER_MESSAGE_CODEC;
+    } else if (body == null) {
+      codec = NULL_MESSAGE_CODEC;
     } else if (body instanceof String) {
       codec = STRING_MESSAGE_CODEC;
     } else if (body instanceof JsonObject) {

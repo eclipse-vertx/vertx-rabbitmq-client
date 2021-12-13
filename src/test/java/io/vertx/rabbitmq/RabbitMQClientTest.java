@@ -90,6 +90,8 @@ public class RabbitMQClientTest {
     @Override
     public void handleDelivery(String consumerTag, Envelope envelope, BasicProperties properties, byte[] body) throws IOException {
       logger.info("Message received");
+      testContext.assertEquals("text/plain", properties.getContentType());
+      testContext.assertEquals(null, properties.getContentEncoding());
       testContext.assertEquals("Hello", new String(body, StandardCharsets.UTF_8));
       promise.complete();
     }
@@ -116,7 +118,7 @@ public class RabbitMQClientTest {
             .compose(v -> conChan.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new TestConsumer(conChan, context, donePromise)))
             .compose(v -> pubChan.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
             .compose(v -> pubChan.confirmSelect())
-            .compose(v -> pubChan.basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new BasicProperties(), "Hello".getBytes(StandardCharsets.UTF_8)))
+            .compose(v -> pubChan.basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new BasicProperties(), "Hello"))
             .compose(v -> pubChan.waitForConfirms(1000))
             .compose(v -> donePromise.future())
             .onComplete(ar -> {

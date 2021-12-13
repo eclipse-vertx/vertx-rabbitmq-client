@@ -45,6 +45,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
+import java.util.Objects;
 
 /**
  *
@@ -285,6 +286,25 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     
   }
 
+  public static AMQP.BasicProperties setTypeAndEncoding(AMQP.BasicProperties props, String type, String encoding) {
+    return new AMQP.BasicProperties.Builder()
+            .appId(props.getAppId())
+            .clusterId(props.getClusterId())
+            .contentEncoding(encoding)
+            .contentType(type)
+            .correlationId(props.getCorrelationId())
+            .deliveryMode(props.getDeliveryMode())
+            .expiration(props.getExpiration())
+            .headers(props.getHeaders())
+            .messageId(props.getMessageId())
+            .priority(props.getPriority())
+            .replyTo(props.getReplyTo())
+            .type(props.getType())
+            .timestamp(props.getTimestamp())
+            .userId(props.getUserId())
+            .build();
+  }
+  
   @Override
   public Future<Void> basicPublish(RabbitMQPublishOptions options, String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, Object body) {
     /**
@@ -297,6 +317,11 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
      * Synchronizing is necessary because this introduces a race condition in the generation of the delivery tag.
      */
     String codecName = options == null ? null : options.getCodec();
+    RabbitMQMessageCodec codec = codecManager.lookupCodec(body, codecName);
+    if (!Objects.equals(codec.getContentEncoding(), props.getContentEncoding()) 
+            || !Objects.equals(codec.getContentType(), props.getContentType())) {
+      props = setTypeAndEncoding(props, codec.getContentType(), codec.getContentEncoding());
+    }
     try {
       Channel channel = createLock.get();
       if (!confirmSelected && channel != null && channel.isOpen()) {
@@ -305,7 +330,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
             long deliveryTag = channel.getNextPublishSeqNo();
             options.getDeliveryTagHandler().handle(deliveryTag);
           }
-          channel.basicPublish(exchange, routingKey, mandatory, props, codecManager.convertBody(body, codecName));
+          channel.basicPublish(exchange, routingKey, mandatory, props, codec.encodeToBytes(body));
           return Future.succeededFuture();
         }
       }
@@ -320,13 +345,14 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
       }
     }    
       
+    AMQP.BasicProperties finalProps = props;
     return onChannel(channel -> {
       synchronized(publishLock) {
         if (options != null && options.getDeliveryTagHandler() != null) {
           long deliveryTag = channel.getNextPublishSeqNo();
           options.getDeliveryTagHandler().handle(deliveryTag);
         }
-        channel.basicPublish(exchange, routingKey, mandatory, props, codecManager.convertBody(body, codecName));
+        channel.basicPublish(exchange, routingKey, mandatory, finalProps, codec.encodeToBytes(body));
         if (waitForConfirms) {
           channel.waitForConfirms();
         }

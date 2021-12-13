@@ -69,9 +69,9 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
 
     final String routingKey;
     final BasicProperties properties;
-    final T message;
+    final byte[] message;
 
-    MessageDetails(String channelId, long deliveryTag, Promise<Void> promise, String routingKey, BasicProperties properties, T message) {
+    MessageDetails(String channelId, long deliveryTag, Promise<Void> promise, String routingKey, BasicProperties properties, byte[] message) {
       this.channelId = channelId;
       this.deliveryTag = deliveryTag;
       this.promise = promise;
@@ -186,13 +186,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
       for (MessageDetails md : resend) {
         long deliveryTag = rawChannel.getNextPublishSeqNo();
         try {
-          byte[] body;
-          if (messageCodec != null) {
-            body = messageCodec.encodeToBytes(md.message);
-          } else {
-            body = channel.getCodecManager().convertBody(md.message, null);
-          }
-          rawChannel.basicPublish(exchange, md.routingKey, md.properties, body);
+          rawChannel.basicPublish(exchange, md.routingKey, md.properties, md.message);
           MessageDetails md2 = new MessageDetails(md.channelId, deliveryTag, md.promise, md.routingKey, md.properties, md.message);
           promises.addLast(md2);
         } catch(IOException ex) {
@@ -258,13 +252,20 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   public Future<Void> publish(String routingKey, AMQP.BasicProperties properties, T passedBody) {
     Promise<Void> promise = Promise.promise();
     
-    Object preppedBody = (messageCodec == null) ? passedBody : messageCodec.encodeToBytes(passedBody);
+    RabbitMQMessageCodec codec = (messageCodec == null) ? channel.getCodecManager().lookupCodec(passedBody, null) : messageCodec;
+    if (!Objects.equals(codec.getContentEncoding(), properties.getContentEncoding()) 
+            || !Objects.equals(codec.getContentType(), properties.getContentType())) {
+      properties = RabbitMQChannelImpl.setTypeAndEncoding(properties, codec.getContentType(), codec.getContentEncoding());
+    }
+    AMQP.BasicProperties finalProps = properties;    
+    
+    byte[] preppedBody = codec.encodeToBytes(passedBody);
     
     channel.basicPublish(new RabbitMQPublishOptions()
             .setDeliveryTagHandler(deliveryTag -> {
       synchronized(promises) {
         if (resendOnReconnect) {
-          promises.addLast(new MessageDetails(channel.getChannelId(), deliveryTag, promise, routingKey, properties, passedBody));
+          promises.addLast(new MessageDetails(channel.getChannelId(), deliveryTag, promise, routingKey, finalProps, preppedBody));
         } else {
           promises.addLast(new MessageDetails(channel.getChannelId(), deliveryTag, promise));
         }
@@ -272,7 +273,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
     }), exchange, routingKey, false, properties, preppedBody).onFailure(ex -> {
       if (resendOnReconnect && ex instanceof AlreadyClosedException) {
         synchronized(promises) {
-          resend.addLast(new MessageDetails(channel.getChannelId(), -1, promise, routingKey, properties, passedBody));
+          resend.addLast(new MessageDetails(channel.getChannelId(), -1, promise, routingKey, finalProps, preppedBody));
         }
       } else {
         promise.fail(ex);
