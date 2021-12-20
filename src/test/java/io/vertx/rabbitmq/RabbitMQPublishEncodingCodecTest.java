@@ -25,7 +25,6 @@ import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -37,10 +36,10 @@ import org.testcontainers.containers.Network;
 import static org.junit.Assert.assertEquals;
 
 @RunWith(VertxUnitRunner.class)
-public class RabbitMQPublishCustomCodecTest {
+public class RabbitMQPublishEncodingCodecTest {
 
   @SuppressWarnings("constantname")
-  private static final Logger logger = LoggerFactory.getLogger(RabbitMQPublishCustomCodecTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(RabbitMQPublishEncodingCodecTest.class);
 
   /**
    * This test verifies that all the codecs provided by default by CodecManager work correctly.
@@ -61,14 +60,14 @@ public class RabbitMQPublishCustomCodecTest {
   private final Vertx vertx;
   private RabbitMQConnection connection;
 
-  private Promise<CustomClass> lastMessage;
+  private Promise<String> lastMessage;
 
   private RabbitMQChannel pubChannel;
-  private RabbitMQPublisher<CustomClass> publisher;
+  private RabbitMQPublisher<String> publisher;
   private RabbitMQChannel conChannel;
-  private RabbitMQConsumer<CustomClass> consumer;
+  private RabbitMQConsumer<String> consumer;
 
-  public RabbitMQPublishCustomCodecTest() throws IOException {
+  public RabbitMQPublishEncodingCodecTest() throws IOException {
     logger.info("Constructing");
     this.network = RabbitMQBrokerProvider.getNetwork();
     this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
@@ -90,27 +89,16 @@ public class RabbitMQPublishCustomCodecTest {
   @Before
   public void setup() throws Exception {
     this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
-  }
-  
-  private static final byte[] HEX_ARRAY = "0123456789ABCDEF".getBytes(StandardCharsets.US_ASCII);
-  public static String bytesToHex(byte[] bytes) {
-      byte[] hexChars = new byte[bytes.length * 2];
-      for (int j = 0; j < bytes.length; j++) {
-          int v = bytes[j] & 0xFF;
-          hexChars[j * 2] = HEX_ARRAY[v >>> 4];
-          hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-      }
-      return new String(hexChars, StandardCharsets.UTF_8);
-  }
+  }  
 
-  private Future<Void> testTransfer(String name, CustomClass send, CustomClass required) {
+  private Future<Void> testTransfer(String name, String send, String required) {
     lastMessage = Promise.promise();
     return publisher.publish("", new AMQP.BasicProperties(), send)
             .compose(v -> {
               return lastMessage.future();
             })
             .compose(received -> {
-              if (required.toString().equals(received.toString())) {
+              if (required.equals(received)) {
                 return Future.succeededFuture();
               } else {
                 logger.debug("{}: {} != {}", name, received, required);
@@ -121,21 +109,18 @@ public class RabbitMQPublishCustomCodecTest {
   
   @Test
   public void testCustomClassCodec() {
-    CustomClassCodec codec = new CustomClassCodec();
-    CustomClass value = new CustomClass(17L, "Seventeen", 2.345);
-    CustomClass transformed = codec.decodeFromBytes(codec.encodeToBytes(value));
-    assertEquals(value.getId(), transformed.getId());
-    assertEquals(value.getTitle(), transformed.getTitle());
-    assertEquals(value.getDuration(), transformed.getDuration(), 0.001);
+    CustomStringCodec codec = new CustomStringCodec();
+    String transformed = codec.decodeFromBytes(codec.encodeToBytes("This is a boring string"));
+    assertEquals("This is a boring string", transformed);
   }  
 
   @Test(timeout = 5 * 60 * 1000L)
-  public void testPublishMessageWithCodec(TestContext ctx) throws Exception {
+  public void testPublishMessageWithNamedCodec(TestContext ctx) throws Exception {
     Async async = ctx.async();
 
     createPublisher();
     createConsumer();
-    testTransfer("CustomClass", new CustomClass(19L, "random", 27.435), new CustomClass(19L, "random", 27.435))
+    testTransfer("deflated-utf16", "Another boring string", "Another boring string")
             .onFailure(ex -> {
               ctx.fail(ex);
             })
@@ -147,13 +132,12 @@ public class RabbitMQPublishCustomCodecTest {
 
   private void createPublisher() {
     pubChannel = connection.createChannel();
-    pubChannel.registerCodec(new CustomClassCodec());    
 
     pubChannel.addChannelEstablishedCallback(p -> {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .onComplete(p);
     });
-    publisher = pubChannel.createPublisher(new CustomClassCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions());
+    publisher = pubChannel.createPublisher(new CustomStringCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions());
   }
 
   private void createConsumer() {
@@ -165,7 +149,7 @@ public class RabbitMQPublishCustomCodecTest {
               .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
               .onComplete(p);
     });
-    consumer = conChannel.createConsumer(new CustomClassCodec(), TEST_QUEUE, new RabbitMQConsumerOptions());
+    consumer = conChannel.createConsumer(new CustomStringCodec(), TEST_QUEUE, new RabbitMQConsumerOptions());
     consumer.handler(message -> {
       lastMessage.complete(message.body());
     });

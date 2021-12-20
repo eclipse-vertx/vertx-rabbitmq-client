@@ -253,8 +253,8 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
     Promise<Void> promise = Promise.promise();
     
     RabbitMQMessageCodec codec = (messageCodec == null) ? channel.getCodecManager().lookupCodec(passedBody, null) : messageCodec;
-    if (!Objects.equals(codec.getContentEncoding(), properties.getContentEncoding()) 
-            || !Objects.equals(codec.getContentType(), properties.getContentType())) {
+    if ((codec.getContentEncoding() != null && !Objects.equals(codec.getContentEncoding(), properties.getContentEncoding()))
+            || (codec.getContentType() != null && !Objects.equals(codec.getContentType(), properties.getContentType()))) {
       properties = RabbitMQChannelImpl.setTypeAndEncoding(properties, codec.getContentType(), codec.getContentEncoding());
     }
     AMQP.BasicProperties finalProps = properties;    

@@ -277,6 +277,35 @@ public class RabbitMQExamples {
             });
   }  
   
+  public void basicPublishNamedCodec() {
+    Vertx vertx = Vertx.vertx();
+    RabbitMQOptions config = new RabbitMQOptions();
+    config.setUri("amqp://brokerhost/vhost");
+    config.setConnectionName(this.getClass().getSimpleName());
+    
+    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
+    RabbitMQChannel channel = connection.createChannel();
+    channel.registerCodec(new CustomClassCodec());
+    channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
+            .compose(v -> channel.basicPublish(new RabbitMQPublishOptions().setCodec("deflated-utf16"), "exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
+            .onComplete(ar -> {
+            });
+  }  
+  
+  public void basicPublishTypedCodec() {
+    Vertx vertx = Vertx.vertx();
+    RabbitMQOptions config = new RabbitMQOptions();
+    config.setUri("amqp://brokerhost/vhost");
+    config.setConnectionName(this.getClass().getSimpleName());
+    
+    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
+    RabbitMQChannel channel = connection.createChannel();
+    channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
+            .compose(v -> channel.basicPublish(new RabbitMQPublishOptions(), "exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
+            .onComplete(ar -> {
+            });
+  }  
+  
   public void basicConsume() {
     Vertx vertx = Vertx.vertx();
     RabbitMQOptions config = new RabbitMQOptions();
@@ -297,5 +326,7 @@ public class RabbitMQExamples {
             .onComplete(ar -> {
             });
   }
+  
+  
   
 }

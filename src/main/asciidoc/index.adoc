@@ -5,8 +5,10 @@ A Vert.x client allowing applications to interact with a RabbitMQ broker (AMQP 0
 **This service is experimental and the APIs are likely to change before settling down.**
 
 The client is a relatively thin wrapper around the standard Java RabbitMQ client, with most interactions wrapped in a call to executeBlocking.
-There should not be many things that can be done with the standard Java RabbitMQ client that cannot be done with this Vertx client.
-One exception is that this Vertx client only supports NIO.
+There should not be many things that can be done with the standard Java RabbitMQ client that cannot be done with this Vertx client
+ - the one exception is that this Vertx client only supports NIO.
+
+:toc:
 
 == Getting Started
 
@@ -62,6 +64,9 @@ You can also set multiples addresses to connect to a cluster;
 ----
 {@link examples.RabbitMQExamples#createConnectionWithMultipleHost}
 ----
+Using an AMQP URI and using multiple addresses are mutually exclusive, but the setting of individual parameters may be combined with either of them.
+This allows for an AMQP URI to be used for most aspects of the connection, but for the username and password to be configured independently.
+Individually set parameters will always override parameters extracted from the URI.
 
 All connections and channels are created lazily and only actually attempt to connect to the server when they are actually used (or when specifically asked to as above).
 Thus a more usual approach to connecting would look like:
@@ -73,13 +78,13 @@ Thus a more usual approach to connecting would look like:
 === TLS
 
 The first thing to note is that RabbitMQ supports TLSv1.2 and TLSv1.3, depending upon it's configuration.
-Older versions of TLS can be configured, but shouldn't.
+Older versions of TLS _can_ be configured, but shouldn't be.
 The Java RabbitMQ client cannot be configured to do TLS version negotiation if any other options are specified
-, so it will usually be necessary to ensure that the correct verison is configured in RabbitMQOptions.
+, so it will usually be necessary to ensure that the correct version is configured in RabbitMQOptions.
 There is a bug in versions of the Java RabbitMQ client prior to 5.14.0 that causes it to hang on connection when TLSv1.3 is used with NIO
 - please call RabbitMQOptions#setSecureTransportProtocol("TLSv1.2") if using an earlier version.
 
-There are three basic type of TLs connection that can be made to a RabbitMQ server:
+There are three basic types of TLs connection that can be made to a RabbitMQ server:
 
 * Unsecure.
 The server uses a self-signed certificate and the client doesn't care - this should only be used for testing.
@@ -92,7 +97,7 @@ The server uses a certificate that isn't signed by a public CA, but the client h
 See <<_private_certificate_chain_with_secure_tls_connection>>
 
 In addition to the above the client may be configured to use client certificates to identify the user to the server (see <<_private_certificate_chain_with_client_certificate_tls_connection>>).
-Note that to do anything useful peer verification must be enabled server side (https://www.rabbitmq.com/ssl.html#peer-verification-configuration):
+Note that to do anything useful with client certificates peer verification must be enabled server side (https://www.rabbitmq.com/ssl.html#peer-verification-configuration):
 ....
 ssl_options.verify = verify_peer
 ssl_options.fail_if_no_peer_cert = true
@@ -178,11 +183,40 @@ Set up a consumer to receive messages from a queue.
 {@link examples.RabbitMQExamples#basicConsume}
 ----
 
-=== Reliable Publishing
+== Message Codecs
+
+All messages sent or received by this library are passed through an instance of RabbitMQMessageCodec.
+This interface is analagous to the https://vertx.io/docs/apidocs/io/vertx/core/eventbus/MessageCodec.html[MessageCodec] interface used on the Vertx EventBus.
+There are a few differences between the two:
+# The native message format for Rabbit Messages is byte[], not https://vertx.io/docs/apidocs/io/vertx/core/buffer/Buffer.html[Buffer].
+# When publishing a message the Message Codec may specify values for the Content-Type and Content-Encoding that will override any values set in the properties passed in.
+# The selection of which Message Codec to use, and the default codecs configured, is different.
+
+The body argument to basicPublish is an Object type.
+The values passed in are run through the RabbitMQCodecManager, which applies a codec in the following order:
+# If a codec name is specified in the RabbitMQPublishOptions that is used.
+# If the body is a byte[] the default RabbitMQByteArrayMessageCodec is used.
+# If the body is null the RabbitMQNullMessageCodec is used.
+# If the body class is found in the default codec map the codec found there is used.
+# If the body is a Buffer the RabbitMQBufferMessageCodec is used.
+# If the body is a String the RabbitMQStringMessageCodec is used.
+# If the body is a JsonObject the RabbitMQJsonObjectMessageCodec is used.
+# If the body is a JsonArray the RabbitMQJsonArrayMessageCodec is used.
+
+This ordering means that it is always possible to override the default codec, but provides reasonable defaults for most circumstances.
+
+The instance of RabbitMQCodecManager is internal to the RabbitMQChannel.
+If a custom codec is used it is necessary to register it on all RabbitMQChannel instances that require it.
+
+
+
+
+== Reliable Publishing
 
 Message brokers can be used in two different ways:
 # At most once delivery.
 # At least once delivery.
+(See https://www.rabbitmq.com/reliability.html).
 Achieving at-most-once delivery is the easiest and the default, 
 and is usually not what is required as it makes no guarantees that messages will arrive at all.
 
@@ -192,15 +226,12 @@ may be received more than once.
 Publishers confirming messages can be done either synchronously or asynchronously.
 Synchronous message confirmation is very simple, but has a bad effect on publish rate as each published message
 must be followed by a call to wait for the broker to confirm receipt.
-Synchronous message confirmations present a problem for an asynchronous system like Vertx - 
+Synchronous message confirmations also present a problem for an asynchronous system like Vertx - 
 the client must ensure that no calls to basicPublish are made between the publishing of the message(s) they are
 concerned about and the completion of the call to waitForConfirms.
 
-Two classes are provided to make handling asynchronous confirmations simpler.
-The first, RabbitMQRepublishingPublisher, tracks all messages sent to it and republishes them on a new
-connection if the channel drops before they are confirmed.
-The second, RabbitMQFuturePublisher, returns a Future for each published message that will be completed when the 
-message is confirmed and failed if either the message is rejected by the broker or if the connection fails.
+In order to reduce a boiler plate associated with handling asynchronous confirmations this library provides the RabbitMQPublisher class.
+This class handles the confirmation messages and provides a single Future that is completed when the message is acknowledged.
 
 The table below can be used to get an idea of the throughput that can be achieved with different approaches.
 These values were obtained from running the RabbitMQPublisherPerformanceTest test on an AMD 5950X with 64GB of RAM
@@ -212,38 +243,46 @@ These values were obtained from running the RabbitMQPublisherPerformanceTest tes
 |Time for 50000 messages (seconds)
 |Rate (messages/second)
 
-|Fire and forget (no message confirmation)	
-|1.08	
-|46296
+|Fire and forget (no message confirmation)
+|1.159s
+|43140 M/s
 
 |Wait on each message
-|37.718
-|1325
+|35.579s
+|1405 M/s
 
 |Wait after 10 messages
-|8.158
-|6128
+|8.391s
+|5958 M/s
 
 |Wait after 100 messages
-|5.064s
-|9873
+|5.637s
+|8869 M/s
 
 |Wait after 1000 messages
-|4.633
-|10792
+|5.144s
+|9720 M/s
 
-|Future publisher
-|1.329
-|37622
+|Future publisher 2 with retries
+|1.022s
+|48923 M/s
 
-|Republishing publisher
-|4.728
-|10575
+|Future publisher 2 without retries
+|0.873s
+|57273 M/s
 
 |===
 
-The FuturePublisher creates a Promise for each message published and stores them in a Deque,
+The Publisher creates a Promise for each message published and stores them in a Deque,
 When confirmations are received from RabbitMQ the Promises are completed.
+
+If the connection to the server breaks before acknowledgements are received the Publisher can be configured to either resend the unacknowledged messages or to fail the Promises for those messages.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicConsume}
+----
+
 
 
 

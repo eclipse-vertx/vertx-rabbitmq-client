@@ -15,13 +15,12 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
-import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQBufferMessageCodec;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQJsonArrayMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQJsonObjectMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQNullMessageCodec;
 import io.vertx.rabbitmq.impl.codecs.RabbitMQStringMessageCodec;
-
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -51,18 +50,21 @@ public class RabbitMQCodecManager {
       }
     } else if (body instanceof byte[]) {
       codec = BYTE_ARRAY_MESSAGE_CODEC;
-    } else if (body instanceof Buffer) {
-      codec = BUFFER_MESSAGE_CODEC;
     } else if (body == null) {
       codec = NULL_MESSAGE_CODEC;
-    } else if (body instanceof String) {
-      codec = STRING_MESSAGE_CODEC;
-    } else if (body instanceof JsonObject) {
-      codec = JSON_OBJECT_MESSAGE_CODEC;
-    } else if (body instanceof JsonArray) {
-      codec = JSON_ARRAY_MESSAGE_CODEC;
     } else {
       codec = defaultCodecMap.get(body.getClass());
+      if (codec == null) {
+        if (body instanceof Buffer) {
+          codec = BUFFER_MESSAGE_CODEC;
+        } else if (body instanceof String) {
+          codec = STRING_MESSAGE_CODEC;
+        } else if (body instanceof JsonObject) {
+          codec = JSON_OBJECT_MESSAGE_CODEC;
+        } else if (body instanceof JsonArray) {
+          codec = JSON_ARRAY_MESSAGE_CODEC;
+        } 
+      }
       if (codec == null) {
         throw new IllegalArgumentException("No message codec for type: " + body.getClass());
       }

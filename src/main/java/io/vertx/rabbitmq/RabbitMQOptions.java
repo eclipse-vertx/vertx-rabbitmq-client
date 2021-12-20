@@ -155,7 +155,7 @@ public class RabbitMQOptions {
   public static final boolean DEFAULT_TRUST_ALL = false;
 
   /**
-   * The default ENABLED_SECURE_TRANSPORT_PROTOCOLS value = { "TLSv1.2" }
+   * The default ENABLED_SECURE_TRANSPORT_PROTOCOLS value = { "TLSv1.3" }
    * <p/>
    * RabbitMQ usually supports only TLSv1.2 and TLSv1.3 (if correctly configured).
    * There was an issue with the Java client that prevents TLSv1.3 from working with NIO (fixed in v5.14.0)

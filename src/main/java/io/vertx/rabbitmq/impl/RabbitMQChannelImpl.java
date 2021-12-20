@@ -36,16 +36,16 @@ import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
+import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.io.IOException;
-import io.vertx.rabbitmq.RabbitMQPublisher;
-import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
-import java.util.Objects;
 
 /**
  *
@@ -290,8 +290,8 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     return new AMQP.BasicProperties.Builder()
             .appId(props.getAppId())
             .clusterId(props.getClusterId())
-            .contentEncoding(encoding)
-            .contentType(type)
+            .contentEncoding(encoding == null ? props.getContentEncoding() : encoding)
+            .contentType(type == null ? props.getContentType() : type)
             .correlationId(props.getCorrelationId())
             .deliveryMode(props.getDeliveryMode())
             .expiration(props.getExpiration())
@@ -318,8 +318,8 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
      */
     String codecName = options == null ? null : options.getCodec();
     RabbitMQMessageCodec codec = codecManager.lookupCodec(body, codecName);
-    if (!Objects.equals(codec.getContentEncoding(), props.getContentEncoding()) 
-            || !Objects.equals(codec.getContentType(), props.getContentType())) {
+    if ((codec.getContentEncoding() != null && !Objects.equals(codec.getContentEncoding(), props.getContentEncoding()))
+            || (codec.getContentType() != null && !Objects.equals(codec.getContentType(), props.getContentType()))) {
       props = setTypeAndEncoding(props, codec.getContentType(), codec.getContentEncoding());
     }
     try {

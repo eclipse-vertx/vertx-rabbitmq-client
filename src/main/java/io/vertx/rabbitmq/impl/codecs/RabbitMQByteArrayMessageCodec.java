@@ -24,11 +24,9 @@ import io.vertx.rabbitmq.RabbitMQMessageCodec;
 public class RabbitMQByteArrayMessageCodec implements RabbitMQMessageCodec<byte[]> {
 
   private final String name;
-  private final String contentType;
 
   public RabbitMQByteArrayMessageCodec() {
     this.name = "byte-array";
-    this.contentType = "application/octet-steam";
   }
   
   @Override
@@ -48,7 +46,7 @@ public class RabbitMQByteArrayMessageCodec implements RabbitMQMessageCodec<byte[
 
   @Override
   public String getContentType() {
-    return contentType;
+    return null;
   }
 
   @Override

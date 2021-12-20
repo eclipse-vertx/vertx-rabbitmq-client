@@ -143,7 +143,6 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       addresses = config.getAddresses().isEmpty()
         ? Collections.singletonList(new Address(config.getHost(), config.getPort()))
         : config.getAddresses();
-      cf.setVirtualHost(config.getVirtualHost());
     }
     // Note that this intentionally allows the configuration to override properties from the URL.
     if (config.getUser() != null && !config.getUser().isEmpty()) {
