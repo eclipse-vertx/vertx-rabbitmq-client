@@ -210,6 +210,32 @@ If a custom codec is used it is necessary to register it on all RabbitMQChannel 
 
 
 
+Publish a message using a named custom codec.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublishNamedCodec}
+----
+
+Publish a message using a types custom codec.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublishTypedCodec}
+----
+
+=== Consuming Typed Messages
+
+RabbitMQConsumer is a generic interface parameterized with the type of object that the callback will be passed.
+There are two versions of createConsumer:
+[source,$lang]
+----
+  RabbitMQConsumer<byte[]> createConsumer(String queue, RabbitMQConsumerOptions options);
+  <T> RabbitMQConsumer<T> createConsumer(RabbitMQMessageCodec<T> codec, String queue, RabbitMQConsumerOptions options);
+----
+
+The default version produces a consumer parameterised with byte[], but an alternative consumer can be created by specifying the codec to be used.
+
 
 == Reliable Publishing
 

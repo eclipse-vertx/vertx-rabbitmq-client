@@ -25,6 +25,8 @@ import io.vertx.rabbitmq.DefaultConsumer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQConnection;
+import io.vertx.rabbitmq.RabbitMQConsumer;
+import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import java.io.IOException;
@@ -277,34 +279,36 @@ public class RabbitMQExamples {
             });
   }  
   
-  public void basicPublishNamedCodec() {
-    Vertx vertx = Vertx.vertx();
-    RabbitMQOptions config = new RabbitMQOptions();
-    config.setUri("amqp://brokerhost/vhost");
-    config.setConnectionName(this.getClass().getSimpleName());
-    
-    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
+  public void basicPublishNamedCodec(RabbitMQConnection connection) {
     RabbitMQChannel channel = connection.createChannel();
     channel.registerCodec(new CustomClassCodec());
     channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
-            .compose(v -> channel.basicPublish(new RabbitMQPublishOptions().setCodec("deflated-utf16"), "exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
+            .compose(v -> channel.basicPublish(new RabbitMQPublishOptions().setCodec("deflated-utf16"), "exchange", "routingKey", false, null, "String message"))
             .onComplete(ar -> {
             });
   }  
   
-  public void basicPublishTypedCodec() {
-    Vertx vertx = Vertx.vertx();
-    RabbitMQOptions config = new RabbitMQOptions();
-    config.setUri("amqp://brokerhost/vhost");
-    config.setConnectionName(this.getClass().getSimpleName());
-    
-    RabbitMQConnection connection = RabbitMQClient.create(vertx, config);    
+  public void basicPublishTypedCodec(RabbitMQConnection connection) {
     RabbitMQChannel channel = connection.createChannel();
+    channel.registerDefaultCodec(CustomClass.class, new CustomClassCodec());
     channel.exchangeDeclare("exchange", BuiltinExchangeType.FANOUT, true, true, null)
-            .compose(v -> channel.basicPublish(new RabbitMQPublishOptions(), "exchange", "routingKey", false, null, "Body".getBytes(StandardCharsets.UTF_8)))
+            .compose(v -> channel.basicPublish(new RabbitMQPublishOptions(), "exchange", "routingKey", false, null, new CustomClass(17, "title", 17.8)))
             .onComplete(ar -> {
             });
   }  
+  
+  /**
+   * @see RabbitMQPublishCustomCodecTest )
+   */
+  public void createConsumerWithCodec(RabbitMQConnection connection) {
+    RabbitMQChannel channel = connection.createChannel();
+    channel.registerCodec(new CustomClassCodec());    
+    RabbitMQConsumer<CustomClass> consumer = channel.createConsumer(new CustomClassCodec(), "queue", new RabbitMQConsumerOptions());
+    consumer.handler(message -> {
+      CustomClass cc = message.body();
+    });
+    consumer.consume(true, null);
+  }
   
   public void basicConsume() {
     Vertx vertx = Vertx.vertx();
