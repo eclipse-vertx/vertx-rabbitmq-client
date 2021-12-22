@@ -28,6 +28,8 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.net.JksOptions;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
@@ -44,8 +46,6 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -109,7 +109,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     
     // Use uri if set, otherwise support individual connection parameters    
     if (uriString != null) {      
-      logger.debug("Attempting connection to {}", uriString);
+      logger.debug("Attempting connection to " + uriString);
       URI uri = null;
       try {
         uri = new URI(uriString);
@@ -143,7 +143,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       addresses = config.getAddresses().isEmpty()
         ? Collections.singletonList(new Address(config.getHost(), config.getPort()))
         : config.getAddresses();
-      logger.debug("Attempting connection to {}", addresses);
+      logger.debug("Attempting connection to " + addresses);
     }
     // Note that this intentionally allows the configuration to override properties from the URL.
     if (config.getUser() != null && !config.getUser().isEmpty()) {
@@ -159,23 +159,31 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       configureTlsProtocol(cf);
     }
     if (addresses != null) {
-      logger.info("{}onnecting to amqp{}://{}@{}:{}/{}"
-              , connectCount.get() > 0 ? "Rec" : "C"
-              , cf.isSSL() ? "s" : ""
-              , cf.getUsername()
-              , addresses.size() == 1 ? addresses.get(0) : addresses
-              , cf.getPort()
-              , URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
+      logger.info(
+              (connectCount.get() > 0 ? "Rec" : "C")
+              + "onnecting to amqp"
+              + (cf.isSSL() ? "s" : "")
+              + "://"
+              + cf.getUsername()
+              + "@"
+              + (addresses.size() == 1 ? addresses.get(0) : addresses)
+              + "/"
+              + URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
       );
     } else {
-      logger.info("{}onnecting to amqp{}://{}@{}:{}/{}"
-              , connectCount.get() > 0 ? "Rec" : "C"
-              , cf.isSSL() ? "s" : ""
-              , cf.getUsername()
-              , cf.getHost()
-              , cf.getPort()
-              , URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
-      );      
+      logger.info(
+              (connectCount.get() > 0 ? "Rec" : "C")
+              + "onnecting to amqp"
+              + (cf.isSSL() ? "s" : "")
+              + "://"
+              + cf.getUsername()
+              + "@"
+              + cf.getHost()
+              + ":"
+              + cf.getPort()
+              + "/"
+              + URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
+      );
     }
     
     cf.setConnectionTimeout(config.getConnectionTimeout());
@@ -268,17 +276,20 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     lastConnectedInstance = connectCount.incrementAndGet();
     connectionName = config.getConnectionName();
     conn.setId(Long.toString(lastConnectedInstance));
-    logger.info("Established connection to amqp{}://{}@{}/{}"
-            , cf.isSSL() ? "s" : ""
-            , cf.getUsername()
-            , conn.getAddress()
-            , URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
+    logger.info("Established connection to amqp"
+            + (cf.isSSL() ? "s" : "")
+            + "://"
+            + cf.getUsername()
+            + "@"
+            + conn.getAddress()
+            + "/"
+            + URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
     );      
     conn.addShutdownListener(this);
     conn.addBlockedListener(new BlockedListener() {
       @Override
       public void handleBlocked(String string) throws IOException {
-        logger.info("Blocked: {}", string);
+        logger.info("Blocked: " + string);
       }
 
       @Override
@@ -323,7 +334,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
 
   @Override
   public void shutdownCompleted(ShutdownSignalException cause) {
-    logger.info("Connection {} Shutdown: {}", ((Connection) cause.getReference()).getId(), cause.getMessage());
+    logger.info("Connection " + ((Connection) cause.getReference()).getId() + " Shutdown: " + cause.getMessage());
   }
   
   protected boolean shouldRetryConnection() {
@@ -332,33 +343,33 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       return false;      
     }
     if (config.getReconnectInterval() <= 0) {
-      logger.debug("Not retrying connection because reconnect internal ({}) <= 0", config.getReconnectInterval());
+      logger.debug("Not retrying connection because reconnect internal (" + config.getReconnectInterval() + ") <= 0");
       return false;      
     }
     if (connectedAtLeastOnce) {
       if (config.getReconnectAttempts() < 0) {
-        logger.debug("Retrying because reconnect limit ({}) < 0", config.getReconnectAttempts()); 
+        logger.debug("Retrying because reconnect limit (" + config.getReconnectAttempts() + ") < 0"); 
         ++reconnectCount;
         return true;
       } else if (config.getReconnectAttempts() > reconnectCount) {
-        logger.debug("Retrying because reconnect count ({}) < limit ({})", reconnectCount, config.getReconnectAttempts()); 
+        logger.debug("Retrying because reconnect count (" + reconnectCount + ") < limit (" + config.getReconnectAttempts() + ")"); 
         ++reconnectCount;
         return true;
       } else {
-        logger.debug("Not retrying connection because reconnect count ({}) >= limit ({})", reconnectCount, config.getReconnectAttempts()); 
+        logger.debug("Not retrying connection because reconnect count (" + reconnectCount + ") >= limit (" + config.getReconnectAttempts() + ")"); 
         return false;
       }
     } else {
       if (config.getInitialConnectAttempts() < 0) {
-        logger.debug("Retrying because initial reconnect limit ({}) < 0", config.getInitialConnectAttempts()); 
+        logger.debug("Retrying because initial reconnect limit (" + config.getInitialConnectAttempts() + ") < 0"); 
         ++reconnectCount;
         return true;
       } else if (config.getInitialConnectAttempts() > reconnectCount) {
-        logger.debug("Retrying because reconnect count ({}) < initial limit ({})", reconnectCount, config.getInitialConnectAttempts()); 
+        logger.debug("Retrying because reconnect count (" + reconnectCount + ") < initial limit (" + config.getInitialConnectAttempts() + ")"); 
         ++reconnectCount;
         return true;
       } else {
-        logger.debug("Not retrying connection because reconnect count ({}) >= initial limit ({})", reconnectCount, config.getInitialConnectAttempts()); 
+        logger.debug("Not retrying connection because reconnect count (" + reconnectCount + ") >= initial limit (" + config.getInitialConnectAttempts() + ")"); 
         return false;
       }
     }        
@@ -394,8 +405,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   
   public Future<Channel> openChannel(long lastInstance) {
     synchronized(connectingPromiseLock) {
-      logger.info("ConnectionFuture: {}, lastInstance: {}, connectCount: {}, closed: {}"
-              , connectingFuture, lastInstance, this.connectCount.get(), closed);
+      logger.debug("ConnectionFuture: " + connectingFuture + ", lastInstance: " + lastInstance + ", connectCount: " + connectCount.get() + ", closed: " + closed);
       if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
         synchronized(connectionLock) {       
           if (lastConnectedInstance != connectCount.get()) {

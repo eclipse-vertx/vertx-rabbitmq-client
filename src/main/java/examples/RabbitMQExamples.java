@@ -37,10 +37,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -48,6 +48,8 @@ import org.slf4j.LoggerFactory;
  * @author jtalbut
  */
 public class RabbitMQExamples {
+  
+  private static Logger logger = Logger.getLogger("examples.RabbitMQExamples");
   
   private final String EXCHANGE_NAME = this.getClass().getName() + "Exchange";
   private final String QUEUE_NAME = this.getClass().getName() + "Queue";
@@ -57,10 +59,7 @@ public class RabbitMQExamples {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_DURABLE = true;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
-  
-  @SuppressWarnings("constantname")
-  private static final Logger logger = LoggerFactory.getLogger(RabbitMQExamples.class);
-  
+    
   public void createConnectionWithUri() {
     Vertx vertx = Vertx.vertx();
     RabbitMQOptions config = new RabbitMQOptions();
@@ -186,7 +185,7 @@ public class RabbitMQExamples {
             .setConnectionName(ManagementFactory.getRuntimeMXBean().getName())
             .setTlsHostnameVerification(false)
             .setSslContextFactory((String name) -> {
-              logger.info("Creating SSL Context for {}", name);
+              logger.info("Creating SSL Context for " + name);
               SSLContext c = null;
               try {
                 char[] trustPassphrase = "password".toCharArray();
@@ -201,7 +200,7 @@ public class RabbitMQExamples {
                 c = SSLContext.getInstance("TLSv1.2");
                 c.init(null, tmf.getTrustManagers(), null);
               } catch(Exception ex) {
-                logger.error("Failed to prepare SSLContext: ", ex);
+                logger.log(Level.SEVERE, "Failed to prepare SSLContext: ", ex);
               }
               return c;
             })
@@ -326,7 +325,7 @@ public class RabbitMQExamples {
       channel.exchangeDeclare(EXCHANGE_NAME, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .compose(v -> channel.queueDeclare("", false, true, true, null))
               .compose(brokerQueueName -> {
-                logger.debug("Queue declared as {}", brokerQueueName);
+                logger.info("Queue declared as " + brokerQueueName);
 
                 // The first time this runs there will be no existing consumer
                 // on subsequent connections the consumer needs to be update with the new queue name
@@ -337,7 +336,7 @@ public class RabbitMQExamples {
                 } else {
                   currentConsumer = channel.createConsumer(new RabbitMQLongMessageCodec(), brokerQueueName, new RabbitMQConsumerOptions());
                   currentConsumer.handler(message -> {
-                    logger.debug("Got message {} from {}", message.body(), brokerQueueName);
+                    logger.log(Level.INFO, "Got message {0} from {1}", new Object[]{message.body(), brokerQueueName});
                   });
                   consumer.set(currentConsumer);
                   currentConsumer.consume(true, null);

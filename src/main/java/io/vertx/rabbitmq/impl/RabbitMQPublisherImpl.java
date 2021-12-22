@@ -22,20 +22,20 @@ import com.rabbitmq.client.Channel;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
+import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import io.vertx.rabbitmq.RabbitMQPublisher;
-import java.io.IOException;
-import java.util.Collection;
 
 /**
  * This is intended to be the one Publisher to rule them all.
@@ -182,7 +182,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
     boolean done = false;
     copyPromises(resend);    
     synchronized(promises) {
-      log.debug("Connection recovered, resending {} messages", resend.size());
+      log.debug("Connection recovered, resending " + resend.size() + " messages");
       for (MessageDetails md : resend) {
         long deliveryTag = rawChannel.getNextPublishSeqNo();
         try {
@@ -223,7 +223,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
           toComplete.add(tp);
         }
       } else {
-        log.warn("Searching for promise for {} where leading promise has {}", rawConfirmation.getDeliveryTag(), promises.getFirst().deliveryTag);
+        log.warn("Searching for promise for " + rawConfirmation.getDeliveryTag() + " where leading promise has " + promises.getFirst().deliveryTag);
         for (MessageDetails tp : promises) {
           if (tp.deliveryTag == rawConfirmation.getDeliveryTag()) {
             toComplete.add(tp);

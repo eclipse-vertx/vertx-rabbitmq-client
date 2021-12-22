@@ -29,6 +29,8 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
@@ -44,8 +46,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -183,7 +183,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
                         recoverable.addRecoveryListener(new RecoveryListener() {
                           @Override
                           public void handleRecovery(Recoverable recoverable) {
-                            log.info("Channel {} recovered", recoverable);
+                            log.info("Channel " + recoverable + " recovered");
                             List<Handler<Channel>> callbacks;
                             synchronized(channelRecoveryCallbacks) {
                               callbacks = new ArrayList<>(channelRecoveryCallbacks);
@@ -208,7 +208,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     if (retries > 0) {
       this.knownConnectionInstance = -1;
     }
-    log.trace("Channel {} Shutdown: {}", this, cause.getMessage());
+    log.trace("Channel " + this + " Shutdown: " + cause.getMessage());
     for (Handler<ShutdownSignalException> handler : shutdownHandlers) {
       handler.handle(cause);
     }
@@ -335,7 +335,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
         }
       }
     } catch(IOException ex) {
-      log.warn("Synchronous send of basicPublish({}, {}, {}, ...) failed: ", exchange, routingKey, mandatory, ex);
+      log.warn("Synchronous send of basicPublish(" + exchange + ", " + routingKey + ", " + mandatory + ": ", ex);
     }
     
     boolean waitForConfirms = options != null && options.isWaitForConfirm();
