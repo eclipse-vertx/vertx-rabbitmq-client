@@ -52,6 +52,9 @@ public class RabbitMQLongMessageCodec implements RabbitMQMessageCodec<Long> {
 
   @Override
   public Long decodeFromBytes(byte[] data) {
+    if (data.length != 8) {
+      return null;
+    }
     return 
             ((long) data[7] << 56)
             | ((long) data[6] & 0xff) << 48

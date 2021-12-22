@@ -67,7 +67,7 @@ public class RabbitMQOptionsConverter {
           break;
         case "initialConnectAttempts":
           if (member.getValue() instanceof Number) {
-            obj.setInitialConnectAttempts(((Number)member.getValue()).longValue());
+            obj.setInitialConnectAttempts(((Number)member.getValue()).intValue());
           }
           break;
         case "keyStoreOptions":

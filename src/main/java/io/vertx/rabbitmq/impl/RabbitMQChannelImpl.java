@@ -382,11 +382,11 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public Future<Void> queueDeclare(String queue, boolean durable, boolean exclusive, boolean autoDelete, Map<String, Object> arguments) {
+  public Future<String> queueDeclare(String queue, boolean durable, boolean exclusive, boolean autoDelete, Map<String, Object> arguments) {
     
     return onChannel(channel -> {
       return channel.queueDeclare(queue, durable, exclusive, autoDelete, arguments);
-    }).mapEmpty();
+    }).map(dok -> dok.getQueue());
     
   }
 

@@ -174,7 +174,7 @@ public interface RabbitMQChannel {
   
   Future<Void> exchangeBind(String destination, String source, String routingKey, Map<String,Object> arguments);
   
-  Future<Void> queueDeclare(String queue, boolean durable, boolean exclusive, boolean autoDelete, Map<String,Object> arguments);
+  Future<String> queueDeclare(String queue, boolean durable, boolean exclusive, boolean autoDelete, Map<String,Object> arguments);
   
   Future<Void> queueDeclarePassive(String queue);
           

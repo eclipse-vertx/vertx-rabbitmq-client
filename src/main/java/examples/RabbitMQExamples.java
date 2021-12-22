@@ -29,12 +29,14 @@ import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQLongMessageCodec;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import org.slf4j.Logger;
@@ -46,6 +48,15 @@ import org.slf4j.LoggerFactory;
  * @author jtalbut
  */
 public class RabbitMQExamples {
+  
+  private final String EXCHANGE_NAME = this.getClass().getName() + "Exchange";
+  private final String QUEUE_NAME = this.getClass().getName() + "Queue";
+  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_DURABLE = true;
+  private static final boolean DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE = false;
+  private static final BuiltinExchangeType DEFAULT_RABBITMQ_EXCHANGE_TYPE = BuiltinExchangeType.FANOUT;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_DURABLE = true;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
+  private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
   
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQExamples.class);
@@ -297,6 +308,46 @@ public class RabbitMQExamples {
             });
   }  
   
+  public void connectionEstablishedCallback(RabbitMQConnection connection) {
+    RabbitMQChannel channel = connection.createChannel();
+    channel.addChannelEstablishedCallback(p -> {
+      channel.exchangeDeclare(EXCHANGE_NAME, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+              .compose(v -> channel.queueDeclare(QUEUE_NAME, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
+              .compose(v -> channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null))
+              .onComplete(p);
+    });
+  }
+  
+  public void connectionEstablishedCallbackForServerNamedAutoDeleteQueue(RabbitMQConnection connection) {
+    AtomicReference<RabbitMQConsumer> consumer = new AtomicReference<>();
+    RabbitMQChannel channel = connection.createChannel();
+    channel.addChannelEstablishedCallback(promise -> {
+      // Note that the use of of an auto-delete queue will cause message loss when a connection drops, but new messages should be received after recovery.
+      channel.exchangeDeclare(EXCHANGE_NAME, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+              .compose(v -> channel.queueDeclare("", false, true, true, null))
+              .compose(brokerQueueName -> {
+                logger.debug("Queue declared as {}", brokerQueueName);
+
+                // The first time this runs there will be no existing consumer
+                // on subsequent connections the consumer needs to be update with the new queue name
+                RabbitMQConsumer<Long> currentConsumer = consumer.get();
+
+                if (currentConsumer != null) {
+                  currentConsumer.setQueueName(brokerQueueName);
+                } else {
+                  currentConsumer = channel.createConsumer(new RabbitMQLongMessageCodec(), brokerQueueName, new RabbitMQConsumerOptions());
+                  currentConsumer.handler(message -> {
+                    logger.debug("Got message {} from {}", message.body(), brokerQueueName);
+                  });
+                  consumer.set(currentConsumer);
+                  currentConsumer.consume(true, null);
+                }
+                return channel.queueBind(brokerQueueName, EXCHANGE_NAME, "", null);
+              })
+              .onComplete(promise);
+    });
+  }
+ 
   /**
    * @see RabbitMQPublishCustomCodecTest )
    */

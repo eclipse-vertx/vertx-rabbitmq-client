@@ -108,8 +108,8 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     String vhost = config.getVirtualHost();
     
     // Use uri if set, otherwise support individual connection parameters    
-    logger.debug("Attempting connection to {}", uriString);
     if (uriString != null) {      
+      logger.debug("Attempting connection to {}", uriString);
       URI uri = null;
       try {
         uri = new URI(uriString);
@@ -143,6 +143,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       addresses = config.getAddresses().isEmpty()
         ? Collections.singletonList(new Address(config.getHost(), config.getPort()))
         : config.getAddresses();
+      logger.debug("Attempting connection to {}", addresses);
     }
     // Note that this intentionally allows the configuration to override properties from the URL.
     if (config.getUser() != null && !config.getUser().isEmpty()) {
@@ -393,7 +394,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   
   public Future<Channel> openChannel(long lastInstance) {
     synchronized(connectingPromiseLock) {
-      logger.trace("ConnectionFuture: {}, lastInstance: {}, connectCount: {}, closed: {}"
+      logger.info("ConnectionFuture: {}, lastInstance: {}, connectCount: {}, closed: {}"
               , connectingFuture, lastInstance, this.connectCount.get(), closed);
       if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
         synchronized(connectionLock) {       

@@ -130,9 +130,9 @@ public class RabbitMQOptions {
   public static final boolean DEFAULT_AUTOMATIC_RECOVERY_ENABLED = false;
 
   /**
-   * The default number of attempts to make an initial connection = {@code 0L}.
+   * The default number of attempts to make an initial connection = {@code 0}.
    */
-  public static final long DEFAULT_INITIAL_CONNECT_ATTEMPTS = 0L;
+  public static final int DEFAULT_INITIAL_CONNECT_ATTEMPTS = 0;
 
   /**
    * The default connection retry delay = {@code 10000}.
@@ -218,8 +218,8 @@ public class RabbitMQOptions {
   private Boolean topologyRecoveryEnabled;
   private long networkRecoveryInterval;
   
-  // This (and reconnectAttempts, reconnectInterval from NetClientOptions) control the reconnects implented in this library
-  private long initialConnectAttempts;
+  // This (and reconnectAttempts, reconnectInterval) control the reconnects implented in this library
+  private int initialConnectAttempts;
   
   private String connectionName;
 
@@ -643,7 +643,7 @@ public class RabbitMQOptions {
     return this;
   }
 
-  public long getInitialConnectAttempts() {
+  public int getInitialConnectAttempts() {
     return initialConnectAttempts;
   }
 
@@ -668,7 +668,7 @@ public class RabbitMQOptions {
    * @return a reference to this, so the API can be used fluently
    * 
    */
-  public RabbitMQOptions setInitialConnectAttempts(long initialConnectAttempts) {
+  public RabbitMQOptions setInitialConnectAttempts(int initialConnectAttempts) {
     this.initialConnectAttempts = initialConnectAttempts;
     return this;
   }

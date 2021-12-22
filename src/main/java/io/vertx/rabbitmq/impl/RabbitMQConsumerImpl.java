@@ -124,9 +124,9 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
   private Future<String> consume(Promise<String> promise) {
     channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, bridge)
             .onSuccess(consumerTag -> promise.complete(consumerTag))
-            .onFailure(ex -> {
+            .onFailure(ex -> {              
               if (reconnectInterval > 0 && ! cancelled) {
-                log.debug("Failed to consume, will try again after " + reconnectInterval + "ms");
+                log.debug("Failed to consume " + queueName + " (" + ex.getClass() + "), will try again after " + reconnectInterval + "ms");
                 vertx.setTimer(reconnectInterval, (id) -> {
                   consume(promise);
                 });
