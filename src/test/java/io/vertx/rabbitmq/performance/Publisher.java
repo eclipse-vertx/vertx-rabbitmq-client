@@ -1,18 +1,13 @@
 /*
- * Copyright 2021 Eclipse.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+  * Copyright (c) 2011-2022 Contributors to the Eclipse Foundation
+  *
+  * This program and the accompanying materials are made available under the
+  * terms of the Eclipse Public License 2.0 which is available at
+  * http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+  * which is available at https://www.apache.org/licenses/LICENSE-2.0.
+  *
+  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+  */
 package io.vertx.rabbitmq.performance;
 
 import com.rabbitmq.client.AMQP;
@@ -22,12 +17,12 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConnection;
+import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import io.vertx.rabbitmq.RabbitMQPublisher;
 
 
 /**

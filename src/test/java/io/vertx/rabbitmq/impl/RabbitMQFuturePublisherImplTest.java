@@ -1,18 +1,13 @@
 /*
- * Copyright 2021 Eclipse.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+  * Copyright (c) 2011-2022 Contributors to the Eclipse Foundation
+  *
+  * This program and the accompanying materials are made available under the
+  * terms of the Eclipse Public License 2.0 which is available at
+  * http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+  * which is available at https://www.apache.org/licenses/LICENSE-2.0.
+  *
+  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+  */
 package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP;
@@ -31,7 +26,9 @@ import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
+import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
+import io.vertx.rabbitmq.impl.codecs.RabbitMQLongMessageCodec;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
@@ -43,8 +40,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
-import io.vertx.rabbitmq.RabbitMQPublisher;
-import io.vertx.rabbitmq.impl.codecs.RabbitMQLongMessageCodec;
 
 /**
  *
