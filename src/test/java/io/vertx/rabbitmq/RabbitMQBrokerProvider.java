@@ -25,7 +25,7 @@ public class RabbitMQBrokerProvider {
   
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQBrokerProvider.class);
-  public static final String IMAGE_NAME = "rabbitmq:3.9.8-management-alpine";
+  public static final String IMAGE_NAME = "rabbitmq:3.11.5-management-alpine";
   
   private static final Object lock = new Object();
   private static Network network;
@@ -72,7 +72,7 @@ public class RabbitMQBrokerProvider {
   public static GenericContainer getRabbitMqContainerWithPeerValidation() {
     synchronized(lock) {
       if (rabbitmqWithPeerValidation == null) {
-        rabbitmqWithPeerValidation = new GenericContainer("rabbitmq:3.9.8-management-alpine")
+        rabbitmqWithPeerValidation = new GenericContainer("rabbitmq:3.11.5-management-alpine")
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/rabbitmq-peer.conf"), "/etc/rabbitmq/rabbitmq.conf")
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/ca/ca_certificate.pem"), "/etc/rabbitmq/ca_certificate.pem")
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/server/server_certificate.pem"), "/etc/rabbitmq/server_certificate.pem")
