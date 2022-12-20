@@ -82,7 +82,7 @@ Older versions of TLS _can_ be configured, but shouldn't be.
 The Java RabbitMQ client cannot be configured to do TLS version negotiation if any other options are specified
 , so it will usually be necessary to ensure that the correct version is configured in RabbitMQOptions.
 There is a bug in versions of the Java RabbitMQ client prior to 5.14.0 that causes it to hang on connection when TLSv1.3 is used with NIO
-- please call RabbitMQOptions#setSecureTransportProtocol("TLSv1.2") if using an earlier version.
+- please call RabbitMQOptions#setSecureTransportProtocol("TLSv1.2") if you have to use an earlier version.
 
 There are three basic types of TLs connection that can be made to a RabbitMQ server:
 
@@ -184,7 +184,7 @@ RabbitMQOptions options = new RabbitMQOptions();
 options.setAutomaticRecoveryEnabled(true);
 options.setReconnectAttempts(0);
 ----
-The client library will also attempt topology recovery as detailed in its documentation (this is enabled by default in the library and is not exposed in the vertx-rabbitmq-clientOptions).
+The client library will also attempt topology recovery as detailed in its documentation (this is enabled by default in the library and is not exposed in the vertx-rabbitmq-client RabbitMQOptions).
 
 
 
@@ -229,7 +229,7 @@ In this instance it is necessary to both recreate the queue and set the new queu
 
 There is one way in which the two recovery mechanisms can be safely combined: using the vertx-rabbitmq-client reconnections for the initial connection 
 and then using the RabbitMQ client library recovery after that.
-This is easily enabled and works around one of the significant limitations of the client recover:
+This is easily enabled and works around one of the significant limitations of the client recovery:
 [source, java]
 ----
 RabbitMQOptions options = new RabbitMQOptions();
@@ -271,12 +271,14 @@ Set up a consumer to receive messages from a queue.
 All messages sent or received by this library are passed through an instance of RabbitMQMessageCodec.
 This interface is analagous to the https://vertx.io/docs/apidocs/io/vertx/core/eventbus/MessageCodec.html[MessageCodec] interface used on the Vertx EventBus.
 There are a few differences between the two:
-# The native message format for Rabbit Messages is byte[], not https://vertx.io/docs/apidocs/io/vertx/core/buffer/Buffer.html[Buffer].
-# When publishing a message the Message Codec may specify values for the Content-Type and Content-Encoding that will override any values set in the properties passed in.
-# The selection of which Message Codec to use, and the default codecs configured, is different.
+
+* The native message format for Rabbit Messages is byte[], not https://vertx.io/docs/apidocs/io/vertx/core/buffer/Buffer.html[Buffer].
+* When publishing a message the Message Codec may specify values for the Content-Type and Content-Encoding that will override any values set in the properties passed in.
+* The selection of which Message Codec to use, and the default codecs configured, is different.
 
 The body argument to basicPublish is an Object type.
 The values passed in are run through the RabbitMQCodecManager, which applies a codec in the following order:
+
 # If a codec name is specified in the RabbitMQPublishOptions that is used.
 # If the body is a byte[] the default RabbitMQByteArrayMessageCodec is used.
 # If the body is null the RabbitMQNullMessageCodec is used.
@@ -323,9 +325,12 @@ The default version produces a consumer parameterised with byte[], but an altern
 == Reliable Publishing
 
 Message brokers can be used in two different ways:
+
 # At most once delivery.
 # At least once delivery.
+
 (See https://www.rabbitmq.com/reliability.html).
+
 Achieving at-most-once delivery is the easiest and the default, 
 and is usually not what is required as it makes no guarantees that messages will arrive at all.
 
@@ -347,40 +352,23 @@ These values were obtained from running the RabbitMQPublisherPerformanceTest tes
 , different setups and network configurations will produce different results, though I expect the general trends to be the same.
 
 .Table Performance metrics for different publishing approaches.
-|===
-|Approach
-|Time for 50000 messages (seconds)
-|Rate (messages/second)
 
-|Fire and forget (no message confirmation)
-|1.159s
-|43140 M/s
+| Approach | Time for 50000 messages (seconds) | Rate (messages/second) |
+| :-- | --: | --: |
 
-|Wait on each message
-|35.579s
-|1405 M/s
+| Fire and forget (no message confirmation) | 1.159s | 43140 M/s |
 
-|Wait after 10 messages
-|8.391s
-|5958 M/s
+| Wait on each message | 35.579s | 1405 M/s |
 
-|Wait after 100 messages
-|5.637s
-|8869 M/s
+| Wait after 10 messages | 8.391s | 5958 M/s |
 
-|Wait after 1000 messages
-|5.144s
-|9720 M/s
+| Wait after 100 messages | 5.637s | 8869 M/s |
 
-|Future publisher 2 with retries
-|1.022s
-|48923 M/s
+| Wait after 1000 messages | 5.144s | 9720 M/s |
 
-|Future publisher 2 without retries
-|0.873s
-|57273 M/s
+| Future publisher 2 with retries | 1.022s | 48923 M/s |
 
-|===
+| Future publisher 2 without retries | 0.873s | 57273 M/s |
 
 The Publisher creates a Promise for each message published and stores them in a Deque,
 When confirmations are received from RabbitMQ the Promises are completed.
