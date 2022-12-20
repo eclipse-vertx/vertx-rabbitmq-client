@@ -355,14 +355,14 @@ These values were obtained from running the RabbitMQPublisherPerformanceTest tes
 .Performance metrics for different publishing approaches
 [cols="<,>,>", options="header,footer"]
 |===
-| Approach | Time for 50000 messages (seconds) | Rate (messages/second) |
-| Fire and forget (no message confirmation) | 1.159s | 43140 M/s |
-| Wait on each message | 35.579s | 1405 M/s |
-| Wait after 10 messages | 8.391s | 5958 M/s |
-| Wait after 100 messages | 5.637s | 8869 M/s |
-| Wait after 1000 messages | 5.144s | 9720 M/s |
-| Future publisher 2 with retries | 1.022s | 48923 M/s |
-| Future publisher 2 without retries | 0.873s | 57273 M/s |
+| Approach | Time for 50000 messages (seconds) | Rate (messages/second)
+| Fire and forget (no message confirmation) | 1.159s | 43140 M/s
+| Wait on each message | 35.579s | 1405 M/s
+| Wait after 10 messages | 8.391s | 5958 M/s
+| Wait after 100 messages | 5.637s | 8869 M/s
+| Wait after 1000 messages | 5.144s | 9720 M/s
+| Future publisher 2 with retries | 1.022s | 48923 M/s
+| Future publisher 2 without retries | 0.873s | 57273 M/s
 |===
 
 The Publisher creates a Promise for each message published and stores them in a Deque,
