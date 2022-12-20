@@ -7,8 +7,7 @@ The CA configuration here was created using the approach documented by RabbitMQ 
 This gives (starting in the ssl-server dir):
 ```
 # Create the CA
-mkdir ca
-mkdir ca/certs ca/private
+mkdir -p ca/certs ca/private
 chmod 700 ca/private
 echo 01 > ca/serial
 touch ca/index.txt
@@ -20,7 +19,7 @@ openssl x509 -in ca_certificate.pem -out ca_certificate.cer -outform DER
 cd ..
 
 # Then create the server cert:
-mkdir server
+mkdir -p server
 cd server
 openssl genrsa -out private_key.pem 2048
 openssl req -new -key private_key.pem -out req.pem -outform PEM \
@@ -34,7 +33,7 @@ openssl pkcs12 -export -out server_certificate.p12 -in server_certificate.pem -i
 cd ..
 
 # And the client cert:
-mkdir client
+mkdir -p client
 cd client
 openssl genrsa -out private_key.pem 2048
 openssl req -new -key private_key.pem -out req.pem -outform PEM \
