@@ -279,14 +279,14 @@ There are a few differences between the two:
 The body argument to basicPublish is an Object type.
 The values passed in are run through the RabbitMQCodecManager, which applies a codec in the following order:
 
-# If a codec name is specified in the RabbitMQPublishOptions that is used.
-# If the body is a byte[] the default RabbitMQByteArrayMessageCodec is used.
-# If the body is null the RabbitMQNullMessageCodec is used.
-# If the body class is found in the default codec map the codec found there is used.
-# If the body is a Buffer the RabbitMQBufferMessageCodec is used.
-# If the body is a String the RabbitMQStringMessageCodec is used.
-# If the body is a JsonObject the RabbitMQJsonObjectMessageCodec is used.
-# If the body is a JsonArray the RabbitMQJsonArrayMessageCodec is used.
+. If a codec name is specified in the RabbitMQPublishOptions that is used.
+. If the body is a byte[] the default RabbitMQByteArrayMessageCodec is used.
+. If the body is null the RabbitMQNullMessageCodec is used.
+. If the body class is found in the default codec map the codec found there is used.
+. If the body is a Buffer the RabbitMQBufferMessageCodec is used.
+. If the body is a String the RabbitMQStringMessageCodec is used.
+. If the body is a JsonObject the RabbitMQJsonObjectMessageCodec is used.
+. If the body is a JsonArray the RabbitMQJsonArrayMessageCodec is used.
 
 This ordering means that it is always possible to override the default codec, but provides reasonable defaults for most circumstances.
 
@@ -326,8 +326,8 @@ The default version produces a consumer parameterised with byte[], but an altern
 
 Message brokers can be used in two different ways:
 
-# At most once delivery.
-# At least once delivery.
+. At most once delivery.
+. At least once delivery.
 
 (See https://www.rabbitmq.com/reliability.html).
 
