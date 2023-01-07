@@ -19,7 +19,7 @@ import java.util.Properties;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
-import org.junit.ClassRule;
+import org.junit.AfterClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,8 +37,12 @@ public class RabbitMQSslRawPeerTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslRawTest.class);
   
-  @ClassRule
-  public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
+  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
+  
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
+  }
   
   public static String getPublicAmqpInstance() throws Exception {
     Properties props = new Properties();
@@ -76,7 +80,7 @@ public class RabbitMQSslRawPeerTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(rabbitmq.getMappedPort(5671));    
+    factory.setPort(container.getMappedPort(5671));    
 
     Connection conn = factory.newConnection();
     assertNotNull(conn);
@@ -106,7 +110,7 @@ public class RabbitMQSslRawPeerTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(rabbitmq.getMappedPort(5671));    
+    factory.setPort(container.getMappedPort(5671));    
 
     try {
       factory.newConnection();

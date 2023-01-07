@@ -16,6 +16,7 @@ import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.RunTestOnContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
+import org.junit.AfterClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -35,9 +36,13 @@ public class RabbitMQSslPeerTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslPeerTest.class);
   
-  @ClassRule
-  public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
+  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
   
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
+  }
+
   @Rule
   public RunTestOnContext testRunContext = new RunTestOnContext();
   
@@ -48,7 +53,7 @@ public class RabbitMQSslPeerTest {
   @Test
   public void testCreateWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setTrustStoreOptions(
@@ -63,16 +68,20 @@ public class RabbitMQSslPeerTest {
             )
             ;
 
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    RabbitMQConnection[] connection = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
-            .compose(v -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
+    
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
+            .compose(channel -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Exchange declared");
                 logger.info("Completing test");
-                connection.close().onComplete(ar2 -> {
+                connection[0].close().onComplete(ar2 -> {
                   async.complete();                     
                 });
               } else {
@@ -86,7 +95,7 @@ public class RabbitMQSslPeerTest {
   @Test
   public void testFailWithoutPeerCertCreateWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setKeyStoreOptions(
@@ -96,11 +105,16 @@ public class RabbitMQSslPeerTest {
                             )
             )
             ;
-
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    
+    RabbitMQConnection[] connection = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
+    
+
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 context.fail("Expected to fail");

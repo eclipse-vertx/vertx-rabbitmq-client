@@ -39,6 +39,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.AfterClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -60,8 +61,12 @@ public class RabbitMQPublisherPerformanceTest {
   private static final long WARMUP_ITERATIONS = 10 * 1000;
   private static final long ITERATIONS = 50 * 1000;
   
-  @ClassRule
-  public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
+  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
+  
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
+  }
   
   @Rule
   public RunTestOnContext testRunContext = new RunTestOnContext();
@@ -98,7 +103,7 @@ public class RabbitMQPublisherPerformanceTest {
       }
     });
     RabbitMQOptions config = new RabbitMQOptions();
-    config.setUri("amqp://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5672));
+    config.setUri("amqp://" + container.getHost() + ":" + container.getMappedPort(5672));
     config.setConnectionName(this.getClass().getSimpleName());
     config.setHeartbeatExecutor(heartbeatSvc);
     config.setSharedExecutor(execSvc);
@@ -142,38 +147,47 @@ public class RabbitMQPublisherPerformanceTest {
   }
 
   @Test
-  public void testPerformance(TestContext context) {
+  public void testPerformance(TestContext testContext) {
     RabbitMQOptions config = config();
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-
-    RabbitMQChannel channel = connection.createChannel();
-    Async async = context.async();
     
-    String exchange = this.getClass().getName() + "Exchange";
-    String queue = this.getClass().getName() + "Queue";
+    RabbitMQConnection connection[] = new RabbitMQConnection[1];
     
-    List<RabbitMQPublisherStresser> tests = Arrays.asList(
-            new FireAndForget(connection)
-            , new WaitOnEachMessage(connection)
-            , new WaitEveryNMessages(connection, 10)
-            , new WaitEveryNMessages(connection, 100)
-            , new WaitEveryNMessages(connection, 1000)
-            , new Publisher(testRunContext.vertx(), connection, true)
-            , new Publisher(testRunContext.vertx(), connection, false)
-    );
-
-    channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
-            .compose(v -> channel.queueDeclare(queue, true, false, true, null))
-            .compose(v -> channel.queueBind(queue, exchange, "", null))
-            .compose(v -> channel.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new NullConsumer()))
-            .compose(v -> init(config.getUri(), exchange, tests.iterator()))
-            .compose(v -> runTests(tests.iterator()))
-            .compose(v -> connection.close())
-            .onSuccess(v -> async.complete())
-            .onFailure(ex -> {
-              logger.error("Failed: ", ex);
-              context.fail(ex);
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
             })
+            .onSuccess(channel -> {
+              Async async = testContext.async();
+
+              String exchange = this.getClass().getName() + "Exchange";
+              String queue = this.getClass().getName() + "Queue";
+
+              List<RabbitMQPublisherStresser> tests = Arrays.asList(
+                      new FireAndForget(connection[0])
+                      , new WaitOnEachMessage(connection[0])
+                      , new WaitEveryNMessages(connection[0], 10)
+                      , new WaitEveryNMessages(connection[0], 100)
+                      , new WaitEveryNMessages(connection[0], 1000)
+                      , new Publisher(testRunContext.vertx(), connection[0], true)
+                      , new Publisher(testRunContext.vertx(), connection[0], false)
+              );
+
+              channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
+                      .compose(v -> channel.queueDeclare(queue, true, false, true, null))
+                      .compose(v -> channel.queueBind(queue, exchange, "", null))
+                      .compose(v -> channel.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new NullConsumer()))
+                      .compose(v -> init(config.getUri(), exchange, tests.iterator()))
+                      .compose(v -> runTests(tests.iterator()))
+                      .compose(v -> connection[0].close())
+                      .onSuccess(v -> async.complete())
+                      .onFailure(ex -> {
+                        logger.error("Failed: ", ex);
+                        testContext.fail(ex);
+                      })
+                      ;
+            })
+            .onFailure(testContext::fail)
             ;
     
   }

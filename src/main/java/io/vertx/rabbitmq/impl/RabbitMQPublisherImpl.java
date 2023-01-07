@@ -205,6 +205,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   }
   
   private void handleConfirmation(RabbitMQConfirmation rawConfirmation) {
+    log.debug("handleConfirmation(" + rawConfirmation.getChannelId() + ":" + rawConfirmation.getDeliveryTag() + ")");
     List<MessageDetails> toComplete = new ArrayList<>();
     synchronized(promises) {
       if (promises.isEmpty()) {
@@ -227,6 +228,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
           }
         }
       }
+      log.info("Found " + toComplete.size() + " promises to complete, out of " + promises.size());
     }
     for (MessageDetails tp : toComplete) {
       completePromise(tp.promise, rawConfirmation);

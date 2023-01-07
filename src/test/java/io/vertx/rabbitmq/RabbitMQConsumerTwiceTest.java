@@ -14,17 +14,16 @@ import com.rabbitmq.client.BuiltinExchangeType;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
-import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import java.io.IOException;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 
 
 @RunWith(VertxUnitRunner.class)
@@ -45,8 +44,7 @@ public class RabbitMQConsumerTwiceTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = true;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = true;
 
-  private final Network network;
-  private final GenericContainer networkedRabbitmq;
+  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
   
   private final Vertx vertx;
   private RabbitMQConnection connection;
@@ -56,8 +54,6 @@ public class RabbitMQConsumerTwiceTest {
   
   public RabbitMQConsumerTwiceTest() throws IOException {
     logger.info("Constructing");
-    this.network = RabbitMQBrokerProvider.getNetwork();
-    this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
   }
 
@@ -65,7 +61,7 @@ public class RabbitMQConsumerTwiceTest {
     RabbitMQOptions options = new RabbitMQOptions();
 
     options.setHost("localhost");
-    options.setPort(networkedRabbitmq.getMappedPort(5672));
+    options.setPort(container.getMappedPort(5672));
     options.setConnectionTimeout(500);
     options.setNetworkRecoveryInterval(500);
     options.setRequestedHeartbeat(1);
@@ -78,39 +74,50 @@ public class RabbitMQConsumerTwiceTest {
   }
   
   @Before
-  public void setup() throws Exception {
-    this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
+  public void setup(TestContext testContext) throws Exception {
+    RabbitMQClient.connect(vertx, getRabbitMQOptions())
+            .onSuccess(conn -> {
+              this.connection = conn;
+            })
+            .onComplete(testContext.asyncAssertSuccess());
+  }
+  
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
   }
 
-  @Test(timeout = 1 * 60 * 1000L)
-  public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
-    Async async = ctx.async();
+  @Test(timeout = 1 * 20 * 1000L)
+  public void testCallToConsumerConsume(TestContext testContext) throws Exception {
     
-    conChannel = connection.createChannel();    
-    createAndStartConsumer(conChannel)
-            .onComplete(ar -> {
-              // First one should have succeeded
-              if (ar.failed()) {
-                ctx.fail(ar.cause());
-              } else {
-                ctx.assertNotNull(ar.result());
-              }
+    connection.openChannel()
+            .compose(chann -> {
+              conChannel = chann;
+              return createAndStartConsumer(chann);
+            })
+            .onFailure(ex -> {
+              testContext.fail(ex);
             })
             .compose(v -> {
               return consumer.consume(false, null)
-                      .onComplete(ar -> {
-                        // Second one should have failed
-                        if (ar.succeeded()) {
-                          ctx.fail("Should have failed to create second consumer on the same channel");
-                        } else {
-                          logger.info("Expected failure: ", ar.cause());
-                          conChannel.close()
-                                  .compose(v2 -> connection.close())
-                                  .onComplete(ar2 -> async.complete())
-                                  ;
-                        }
+                      .onSuccess(v2 -> {
+                        testContext.fail("Should have failed to create second consumer on the same channel");
+                      })
+                      .recover(ex -> {
+                        logger.info("Expected failure: ", ex);
+                        return Future.succeededFuture();
                       });
-            });
+            })
+            .compose(v2 -> {
+              return consumer.cancel();
+            })
+            .compose(v2 -> {
+              return conChannel.close();
+            })
+            .compose(v2 -> {
+              return connection.close();
+            })
+            .onComplete(testContext.asyncAssertSuccess());
     
   }
 

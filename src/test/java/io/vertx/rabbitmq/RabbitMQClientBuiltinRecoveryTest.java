@@ -27,13 +27,13 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 
 
 @RunWith(VertxUnitRunner.class)
@@ -57,12 +57,12 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
-  private final Network network;
-  private final GenericContainer networkedRabbitmq;
+  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
   private Proxy proxy;
   
   private final Vertx vertx;
   private RabbitMQConnection connection;
+  private TestContext testContext;
 
   private final Set<String> receivedMessages = new HashSet<>();
   
@@ -79,9 +79,12 @@ public class RabbitMQClientBuiltinRecoveryTest {
   
   public RabbitMQClientBuiltinRecoveryTest() throws IOException {
     logger.info("Constructing");
-    this.network = RabbitMQBrokerProvider.getNetwork();
-    this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
+  }
+
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
   }
 
   private RabbitMQOptions getRabbitMQOptions() {
@@ -101,23 +104,28 @@ public class RabbitMQClientBuiltinRecoveryTest {
   }
   
   @Before
-  public void setup() throws Exception {
-    this.proxy = new Proxy(vertx, this.networkedRabbitmq.getMappedPort(5672));
+  public void setup(TestContext testContext) throws Exception {
+    this.proxy = new Proxy(vertx, this.container.getMappedPort(5672));
     this.proxy.startProxy();
-    this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
+    RabbitMQClient.connect(vertx, getRabbitMQOptions())
+            .onSuccess(conn -> {
+              this.connection = conn;
+            })
+            .onComplete(testContext.asyncAssertSuccess());
   }
 
   @After
-  public void shutdown() {
+  public void shutdownProxy() {
     this.proxy.stopProxy();
   }
 
-  @Test(timeout = 1 * 60 * 1000L)
+  @Test(timeout = 1 * 30 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
+    this.testContext = ctx;
     
-    createAndStartConsumer(vertx, ctx);
-    createAndStartProducer(vertx);
+    connection.openChannel().compose(this::createAndStartConsumer).onFailure(ctx::fail)
+            .andThen(v -> connection.openChannel().onSuccess(this::createAndStartProducer).onFailure(ctx::fail));
     
     // Have to react to allMessagesSent completing in case it completes after the last message is received.
     allMessagesSent.future().onSuccess(count -> {
@@ -150,8 +158,8 @@ public class RabbitMQClientBuiltinRecoveryTest {
 
   }
 
-  private void createAndStartProducer(Vertx vertx) {
-    pubChannel = connection.createChannel();
+  private void createAndStartProducer(RabbitMQChannel channel) {
+    pubChannel = channel;
    
     pubChannel.addChannelEstablishedCallback(p -> {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
@@ -184,15 +192,9 @@ public class RabbitMQClientBuiltinRecoveryTest {
     }));
   }
 
-  private void createAndStartConsumer(Vertx vertx, TestContext ctx) {
+  private Future<Void> createAndStartConsumer(RabbitMQChannel channel) {
     
-    conChannel = connection.createChannel();   
-    conChannel.addChannelEstablishedCallback(p -> {
-      conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
-              .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
-              .onComplete(p);
-    });
+    conChannel = channel;   
     conChannel.addChannelShutdownHandler(sse -> {
       hasShutdown.set(true);
     });
@@ -213,14 +215,21 @@ public class RabbitMQClientBuiltinRecoveryTest {
       }
       conChannel.basicAck(message.consumerTag(), message.envelope().getDeliveryTag(), false);
     });
-    consumer.consume(false, null)
+    return conChannel.addChannelEstablishedCallback(p -> {
+      conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+              .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
+              .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
+              .onComplete(p);
+    }).compose(v -> consumer.consume(false, null)
             .onComplete(ar -> { 
               if (ar.failed()) {
-                ctx.fail(ar.cause());
+                testContext.fail(ar.cause());
               } else {
                 logger.info("Consumer started: {}", ar );
-              } })
-            ;
+              } 
+            })
+    ).mapEmpty()
+    ;
   }
 
   private Future<Void> breakConnection() {

@@ -29,17 +29,6 @@ import java.util.Map;
 public interface RabbitMQChannel {
   
   /**
-   * Establish a Channel to the RabbitMQ server.
-   * All operations on the channel are lazy and will establish the connection/channel only when needed.
-   * This operation exists to permit clients to establish a connection/channel as part of their initialization.
-   * 
-   * Note that, as with all networking operations, it is entirely possible for this method to succeed and then the connection to become disconnected before the next call.
-   * 
-   * @return A Future that will be complete when the channel is established.
-   */
-  Future<Void> connect();
-  
-  /**
    * Set a callback to be called whenever this channel is established.
    * This callback must be idempotent - it will be called each time a connection is established, which may be multiple times against the same instance.
    * Callbacks will be added to a list and called in the order they were added, the only way to remove callbacks is to create a new channel.
@@ -57,11 +46,15 @@ public interface RabbitMQChannel {
    * In this situation these callbacks are the only opportunity to create exchanges, queues and bindings before the client will attempt to use them when it
    * re-establishes connection.
    * If your failover cluster is guaranteed to have the appropriate objects already configured then it is not necessary to use the callbacks (though should be harmless to do so).
+   * 
+   * The callback will be called immediately if the channel has already been established (which will usually be the case) and the Future from that call
+   * will be returned.
    *
    * @param channelEstablishedCallback  callback to be called whenever a new channel is established.
+   * @return 
    */
   @GenIgnore
-  void addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback);
+  Future<Void> addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback);
   
   /**
    * Add a callback that will be called whenever the channel completes its own internal recovery process.

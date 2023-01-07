@@ -10,6 +10,7 @@
   */
 package io.vertx.rabbitmq;
 
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.rabbitmq.impl.RabbitMQConnectionImpl;
 
@@ -24,10 +25,10 @@ public interface RabbitMQClient {
    *
    * @param vertx the vertx instance
    * @param config the client config
-   * @return the client
+   * @return A Future that will be completed when the client is connected.
    */
-  static RabbitMQConnection create(Vertx vertx, RabbitMQOptions config) {
-    return new RabbitMQConnectionImpl(vertx, config);
+  static Future<RabbitMQConnection> connect(Vertx vertx, RabbitMQOptions config) {
+    return new RabbitMQConnectionImpl(vertx, config).connect();
   }
   
 }

@@ -19,6 +19,7 @@ import com.rabbitmq.client.Recoverable;
 import com.rabbitmq.client.RecoveryListener;
 import com.rabbitmq.client.ShutdownListener;
 import com.rabbitmq.client.ShutdownSignalException;
+import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -81,7 +82,27 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
   
   @Override
-  public void addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback) {
+  public Future<Void> addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback) {
+    createLock.addPostCreateHandler(channelEstablishedCallback);
+    if (channelId != null) {
+      Promise<Void> promise = Promise.promise();
+      channelEstablishedCallback.handle(promise);
+      return promise.future();
+    } else {
+      return Future.succeededFuture();
+    }
+  }
+  
+  /**
+   * The same as addChannelEstablishedCallback but does not call the callbacks immediately.
+   * 
+   * See {@link RabbitMQChannel#addChannelEstablishedCallback(io.vertx.core.Handler)}.
+   * 
+   * This method just adds the callback that will be used if the channel has to be reestablished.
+   * 
+   * @param channelEstablishedCallback 
+   */
+  public void addChannelEstablishedCallbackPassively(Handler<Promise<Void>> channelEstablishedCallback) {
     createLock.addPostCreateHandler(channelEstablishedCallback);
   }
   
@@ -157,9 +178,8 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     return channelId;
   }
   
-  @Override
-  public Future<Void> connect() {
-    return onChannel(channel -> null);
+  public Future<RabbitMQChannel> connect() {
+    return onChannel(channel -> this);
   }
   
   private void connect(Promise<Channel> promise) {    

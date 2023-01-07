@@ -295,7 +295,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     
     return conn;
   }
-
+  
   private void configureTlsProtocol(ConnectionFactory cf) throws Exception {
     if (config.isTrustAll()) {
       cf.useSslProtocol();      
@@ -370,6 +370,12 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     }        
   }
   
+  public Future<RabbitMQConnection> connect() {
+    return vertx.<Connection>executeBlocking(promise -> {
+      connectBlocking(promise);
+    }).map(c -> this);    
+  }
+
   private Future<Connection> connectBlocking(Promise<Connection> promise) {
     try {
       synchronized(connectionLock) {
@@ -383,13 +389,16 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       logger.error("Failed to create connection: ", ex);
       if (shouldRetryConnection()) {
         vertx.setTimer(config.getReconnectInterval(), time -> {
-          vertx.executeBlocking(p -> connectBlocking(promise).onComplete(ar -> {
-            if (ar.succeeded()) {
-              p.complete();
-            } else {
-              p.fail(ar.cause());
-            }
-          }));
+          vertx.executeBlocking(p -> {
+            connectBlocking(promise)
+                    .onComplete(ar -> {
+                      if (ar.succeeded()) {
+                        p.complete();
+                      } else {
+                        p.fail(ar.cause());
+                      }
+                    });
+          });
         });
       } else {
         promise.fail(ex);
@@ -398,7 +407,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     return promise.future();
   }  
   
-  public Future<Channel> openChannel(long lastInstance) {
+  Future<Channel> openChannel(long lastInstance) {
     synchronized(connectingPromiseLock) {
       logger.debug("ConnectionFuture: " + connectingFuture + ", lastInstance: " + lastInstance + ", connectCount: " + connectCount.get() + ", closed: " + closed);
       if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
@@ -443,8 +452,9 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   }
 
   @Override
-  public RabbitMQChannel createChannel() {
-    return new RabbitMQChannelImpl(vertx, this, config);
+  public Future<RabbitMQChannel> openChannel() {
+    return new RabbitMQChannelImpl(vertx, this, config)
+            .connect();
   }
 
   @Override

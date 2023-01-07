@@ -59,7 +59,6 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
   private static final boolean DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE = false;
   private static final BuiltinExchangeType DEFAULT_RABBITMQ_EXCHANGE_TYPE = BuiltinExchangeType.FANOUT;
 
-  private final Network network;
   private final GenericContainer networkedRabbitmq;
   private Proxy proxy;
   
@@ -82,7 +81,6 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
   
   public RabbitMQReconnectServerNamedAutoDeleteQueueTest() throws IOException {
     logger.info("Constructing");
-    this.network = RabbitMQBrokerProvider.getNetwork();
     this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
   }
@@ -104,10 +102,15 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
   }
   
   @Before
-  public void setup() throws Exception {
+  public void setup(TestContext testContext) throws Exception {
     this.proxy = new Proxy(vertx, this.networkedRabbitmq.getMappedPort(5672));
     this.proxy.startProxy();
-    this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
+    
+    RabbitMQClient.connect(vertx, getRabbitMQOptions())
+            .onSuccess(conn -> {
+              this.connection = conn;
+            })
+            .onComplete(testContext.asyncAssertSuccess());
   }
 
   @After
@@ -115,12 +118,12 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     this.proxy.stopProxy();
   }
 
-  @Test(timeout = 5 * 60 * 1000L)
+  @Test(timeout = 1 * 60 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
     
-    createAndStartConsumer(vertx, ctx);
-    createAndStartProducer(vertx);
+    connection.openChannel().onSuccess(this::createAndStartProducer).onFailure(ctx::fail);
+    connection.openChannel().onSuccess(this::createAndStartConsumer).onFailure(ctx::fail);
     
     firstMessagesReceived.future()
             .compose(v -> breakConnection())
@@ -144,8 +147,8 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
             ;
   }
 
-  private void createAndStartProducer(Vertx vertx) {
-    pubChannel = connection.createChannel();
+  private void createAndStartProducer(RabbitMQChannel channel) {
+    pubChannel = channel;
    
     pubChannel.addChannelEstablishedCallback(p -> {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
@@ -175,8 +178,8 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     }));
   }
 
-  private void createAndStartConsumer(Vertx vertx, TestContext ctx) {
-    conChannel = connection.createChannel();
+  private void createAndStartConsumer(RabbitMQChannel channel) {
+    conChannel = channel;
    
     conChannel.addChannelEstablishedCallback(promise -> {
       logger.debug("Channel established");
@@ -213,8 +216,7 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     
     conChannel.addChannelShutdownHandler(sse -> {
       hasShutdown.set(true);
-    });        
-    conChannel.connect();
+    });
   }
 
   private Future<Void> breakConnection() {

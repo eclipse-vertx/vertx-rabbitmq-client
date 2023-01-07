@@ -28,28 +28,13 @@ public class RabbitMQBrokerProvider {
   public static final String IMAGE_NAME = "rabbitmq:3.11.5-management-alpine";
   
   private static final Object lock = new Object();
-  private static Network network;
-  private static GenericContainer rabbitmq;
-  
-  private static GenericContainer rabbitmqWithPeerValidation;
-
-  public static Network getNetwork() {
-    synchronized(lock) {
-      if (network == null) {
-        network = Network.newNetwork();        
-      }
-    }
-    return network;
-  }
   
   public static GenericContainer getRabbitMqContainer() {
-    
+
+    GenericContainer rabbitmq;    
     synchronized(lock) {
-      if (network == null) {
-        network = Network.newNetwork();        
-      }
-      if (rabbitmq == null) {
-        rabbitmq = new GenericContainer(IMAGE_NAME)
+      Network network = Network.newNetwork();        
+      rabbitmq = new GenericContainer(IMAGE_NAME)
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/rabbitmq.conf"), "/etc/rabbitmq/rabbitmq.conf")
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/ca/ca_certificate.pem"), "/etc/rabbitmq/ca_certificate.pem")
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/server/server_certificate.pem"), "/etc/rabbitmq/server_certificate.pem")
@@ -58,21 +43,18 @@ public class RabbitMQBrokerProvider {
                 .withNetwork(network)
                 //.withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("TestContainer")))
                       ;
-      }
-      if (!rabbitmq.isRunning()) {
-        rabbitmq.start();
-        logger.info("Started test instance of RabbitMQ with ports {}"
-                , rabbitmq.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmq.getMappedPort((Integer) p))).collect(Collectors.toList())
-        );
-      }
+      rabbitmq.start();
+      logger.info("Started test instance of RabbitMQ with ports {}"
+              , rabbitmq.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmq.getMappedPort((Integer) p))).collect(Collectors.toList())
+      );
     }
     return rabbitmq;
   }
 
   public static GenericContainer getRabbitMqContainerWithPeerValidation() {
+    GenericContainer rabbitmq;
     synchronized(lock) {
-      if (rabbitmqWithPeerValidation == null) {
-        rabbitmqWithPeerValidation = new GenericContainer("rabbitmq:3.11.5-management-alpine")
+      rabbitmq = new GenericContainer(IMAGE_NAME)
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/rabbitmq-peer.conf"), "/etc/rabbitmq/rabbitmq.conf")
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/ca/ca_certificate.pem"), "/etc/rabbitmq/ca_certificate.pem")
                 .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/server/server_certificate.pem"), "/etc/rabbitmq/server_certificate.pem")
@@ -80,14 +62,11 @@ public class RabbitMQBrokerProvider {
                 .withExposedPorts(5671, 5672, 15672)
                 //.withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("TestContainer")))
                 ;
-        if (!rabbitmqWithPeerValidation.isRunning()) {
-          rabbitmqWithPeerValidation.start();
-          logger.info("Started test instance of RabbitMQ with ports {}"
-                , rabbitmqWithPeerValidation.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmqWithPeerValidation.getMappedPort((Integer) p))).collect(Collectors.toList())
-          );
-        }
-      }
+      rabbitmq.start();
+      logger.info("Started test instance of RabbitMQ with ports {}"
+            , rabbitmq.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmq.getMappedPort((Integer) p))).collect(Collectors.toList())
+      );
     }
-    return rabbitmqWithPeerValidation;
+    return rabbitmq;
   }
 }

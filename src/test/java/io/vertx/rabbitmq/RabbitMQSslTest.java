@@ -20,7 +20,7 @@ import java.io.InputStream;
 import java.security.KeyStore;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
-import org.junit.ClassRule;
+import org.junit.AfterClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,8 +45,12 @@ public class RabbitMQSslTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslTest.class);
   
-  @ClassRule
-  public static final GenericContainer rabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
+  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
+  
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
+  }
   
   @Rule
   public RunTestOnContext testRunContext = new RunTestOnContext();
@@ -58,21 +62,24 @@ public class RabbitMQSslTest {
   @Test
   public void testCreateWithInsecureServer(TestContext context) {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithInsecureServer")
             .setTrustAll(true)
             ;
     
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    RabbitMQConnection connection[] = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
-            .compose(v -> channel.exchangeDeclare("testCreateWithWorkingServer", BuiltinExchangeType.FANOUT, true, true, null))
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
+            .compose(chann -> chann.exchangeDeclare("testCreateWithWorkingServer", BuiltinExchangeType.FANOUT, true, true, null))
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Exchange declared");
                 logger.info("Completing test");
-                connection.close().onComplete(ar2 -> {
+                connection[0].close().onComplete(ar2 -> {
                   async.complete();                     
                 });
               } else {
@@ -85,15 +92,18 @@ public class RabbitMQSslTest {
   @Test
   public void testFailWithInsecureServer(TestContext context) {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithInsecureServer")
             // .setTrustAll(true)
             ;
     
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    RabbitMQConnection connection[] = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Should have failed to connect");
@@ -108,7 +118,7 @@ public class RabbitMQSslTest {
   @Test
   public void testCreateWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setTrustStoreOptions(
@@ -119,16 +129,19 @@ public class RabbitMQSslTest {
             )
             ;
 
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    RabbitMQConnection connection[] = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
-            .compose(v -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
+            .compose(channel -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Exchange declared");
                 logger.info("Completing test");
-                connection.close().onComplete(ar2 -> {
+                connection[0].close().onComplete(ar2 -> {
                   async.complete();                     
                 });
               } else {
@@ -142,7 +155,7 @@ public class RabbitMQSslTest {
   @Test
   public void testCreateWithSslContextFactory(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setSslContextFactory((String name) -> {
@@ -167,16 +180,19 @@ public class RabbitMQSslTest {
             })
             ;
 
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    RabbitMQConnection connection[] = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
-            .compose(v -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
+            .compose(channel -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Exchange declared");
                 logger.info("Completing test");
-                connection.close().onComplete(ar2 -> {
+                connection[0].close().onComplete(ar2 -> {
                   async.complete();                     
                 });
               } else {
@@ -189,7 +205,7 @@ public class RabbitMQSslTest {
   @Test
   public void testFailWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + rabbitmq.getContainerIpAddress() + ":" + rabbitmq.getMappedPort(5671))
+            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             // .setTlsHostnameVerification(false)
             .setTrustStoreOptions(
@@ -200,10 +216,13 @@ public class RabbitMQSslTest {
             )
             ;
 
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    RabbitMQConnection connection[] = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Should have failed to connect");
@@ -225,16 +244,19 @@ public class RabbitMQSslTest {
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithPublicCertChain")
             ;
     
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-    RabbitMQChannel channel = connection.createChannel();
+    RabbitMQConnection connection[] = new RabbitMQConnection[1];
     Async async = context.async();
-    channel.connect()
-            .compose(v -> channel.exchangeDeclare("testCreateWithPublicCertChain", BuiltinExchangeType.FANOUT, true, true, null))
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(conn -> {
+              connection[0] = conn;
+              return connection[0].openChannel();
+            })
+            .compose(channel -> channel.exchangeDeclare("testCreateWithPublicCertChain", BuiltinExchangeType.FANOUT, true, true, null))
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Exchange declared");
                 logger.info("Completing test");
-                connection.close().onComplete(ar2 -> {
+                connection[0].close().onComplete(ar2 -> {
                   async.complete();                     
                 });
               } else {

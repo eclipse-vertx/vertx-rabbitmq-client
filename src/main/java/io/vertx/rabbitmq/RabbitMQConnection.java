@@ -18,7 +18,7 @@ import io.vertx.core.Future;
  */
 public interface RabbitMQConnection {
   
-  RabbitMQChannel createChannel();
+  Future<RabbitMQChannel> openChannel();
   
   /**
    * Returns a strictly increasing identifier of the underlying connection (essentially a number that is incremented each time the connection is reconnected).

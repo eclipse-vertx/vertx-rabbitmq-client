@@ -34,11 +34,13 @@ public class RabbitMQConfirmListenerImpl implements ConfirmListener {
 
   @Override
   public void handleAck(long deliveryTag, boolean multiple) throws IOException {
+    logger.debug("handleAck(" + deliveryTag + ", " + multiple + ")");
     this.handlerContext.runOnContext(v -> handleAck(deliveryTag, multiple, true));
   }
 
   @Override
   public void handleNack(long deliveryTag, boolean multiple) throws IOException {
+    logger.debug("handleNack(" + deliveryTag + ", " + multiple + ")");
     this.handlerContext.runOnContext(v -> handleAck(deliveryTag, multiple, false));
   }
   

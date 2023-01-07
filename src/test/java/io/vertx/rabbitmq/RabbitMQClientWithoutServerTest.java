@@ -10,7 +10,6 @@
   */
 package io.vertx.rabbitmq;
 
-import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.RunTestOnContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
@@ -33,16 +32,14 @@ public class RabbitMQClientWithoutServerTest {
   public void testCreateWithNoRabbitMq(TestContext context) {
     RabbitMQOptions config = new RabbitMQOptions();
     config.setUri("amqp://nonexistant.localhost:0/");
-    RabbitMQConnection connection = RabbitMQClient.create(testRunContext.vertx(), config);
-
-    RabbitMQChannel channel = connection.createChannel();
-    Async async = context.async();
-    channel.connect()
+    
+    RabbitMQClient.connect(testRunContext.vertx(), config)
+            .compose(connection -> connection.openChannel())
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 context.fail("Expected failure as the URI is invalid");
               } else {
-                async.complete();
+                context.async().complete();
               }
             });
   }

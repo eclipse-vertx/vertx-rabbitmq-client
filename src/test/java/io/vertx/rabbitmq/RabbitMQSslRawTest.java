@@ -19,6 +19,7 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
+import org.junit.AfterClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,8 +38,13 @@ public class RabbitMQSslRawTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslRawTest.class);
   
-  public static final GenericContainer rabbitmq = getRabbitMqContainer();  
-
+  private static final GenericContainer container = getRabbitMqContainer();  
+  
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
+  }
+ 
   public static GenericContainer getRabbitMqContainer() {
     GenericContainer container = new GenericContainer("rabbitmq:3.11.5-management-alpine")
           .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/rabbitmq.conf"), "/etc/rabbitmq/rabbitmq.conf")
@@ -71,7 +77,7 @@ public class RabbitMQSslRawTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(rabbitmq.getMappedPort(5671));
+    factory.setPort(container.getMappedPort(5671));
 
     Connection conn = factory.newConnection();
     assertNotNull(conn);
@@ -102,7 +108,7 @@ public class RabbitMQSslRawTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(rabbitmq.getMappedPort(5671));
+    factory.setPort(container.getMappedPort(5671));
 
     Connection conn = factory.newConnection();
     assertNotNull(conn);
@@ -163,7 +169,7 @@ public class RabbitMQSslRawTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(rabbitmq.getMappedPort(5671));
+    factory.setPort(container.getMappedPort(5671));
 
     Connection conn = factory.newConnection("testSslWithSslContextFactory");
     assertNotNull(conn);

@@ -25,13 +25,13 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 
 
 @RunWith(VertxUnitRunner.class)
@@ -52,9 +52,9 @@ public class RabbitMQClientDisconnectTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = true;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = true;
 
-  private final Network network;
-  private final GenericContainer networkedRabbitmq;
+  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
   private Proxy proxy;
+  private TestContext testContext;
   
   private final Vertx vertx;
   private RabbitMQConnection connection;
@@ -71,9 +71,12 @@ public class RabbitMQClientDisconnectTest {
   
   public RabbitMQClientDisconnectTest() throws IOException {
     logger.info("Constructing");
-    this.network = RabbitMQBrokerProvider.getNetwork();
-    this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
+  }
+
+  @AfterClass
+  public static void shutdown() {
+    container.stop();
   }
 
   private RabbitMQOptions getRabbitMQOptions() {
@@ -93,23 +96,28 @@ public class RabbitMQClientDisconnectTest {
   }
   
   @Before
-  public void setup() throws Exception {
-    this.proxy = new Proxy(vertx, this.networkedRabbitmq.getMappedPort(5672));
+  public void setup(TestContext testContext) throws Exception {
+    this.proxy = new Proxy(vertx, this.container.getMappedPort(5672));
     this.proxy.startProxy();
-    this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
+    RabbitMQClient.connect(vertx, getRabbitMQOptions())
+            .onSuccess(conn -> {
+              this.connection = conn;
+            })
+            .onComplete(testContext.asyncAssertSuccess());
   }
 
   @After
-  public void shutdown() {
+  public void shutdownProxy() {
     this.proxy.stopProxy();
   }
 
-  @Test(timeout = 1 * 60 * 1000L)
+  @Test(timeout = 1 * 30 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
+    this.testContext = ctx;
     
-    createAndStartConsumer(vertx, ctx);
-    createAndStartProducer(vertx);
+    connection.openChannel().onSuccess(this::createAndStartProducer).onFailure(ctx::fail);
+    connection.openChannel().onSuccess(this::createAndStartConsumer).onFailure(ctx::fail);
     
     // Have to react to allMessagesSent completing in case it completes after the last message is received.
     allMessagesSent.future().onSuccess(count -> {
@@ -138,8 +146,8 @@ public class RabbitMQClientDisconnectTest {
 
   }
 
-  private void createAndStartProducer(Vertx vertx) {
-    pubChannel = connection.createChannel();
+  private void createAndStartProducer(RabbitMQChannel channel) {
+    pubChannel = channel;
    
     pubChannel.addChannelEstablishedCallback(p -> {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
@@ -166,8 +174,8 @@ public class RabbitMQClientDisconnectTest {
     }));
   }
 
-  private void createAndStartConsumer(Vertx vertx, TestContext ctx) {
-    conChannel = connection.createChannel();
+  private void createAndStartConsumer(RabbitMQChannel channel) {
+    conChannel = channel;
    
     conChannel.addChannelEstablishedCallback(p -> {
       conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
@@ -191,7 +199,7 @@ public class RabbitMQClientDisconnectTest {
     consumer.consume(false, null)
             .onComplete(ar -> { 
               if (ar.failed()) {
-                ctx.fail(ar.cause());
+                testContext.fail(ar.cause());
               } else {
                 logger.info("Consumer started: {}", ar );
               } })

@@ -27,12 +27,13 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class FireAndForget implements RabbitMQPublisherStresser {
 
-  private final RabbitMQChannel channel;
+  private final RabbitMQConnection connection;
+  private RabbitMQChannel channel;
   private final AtomicLong counter = new AtomicLong();
   private String exchange;
 
   public FireAndForget(RabbitMQConnection connection) {
-    this.channel = connection.createChannel();
+    this.connection = connection;
   }
   
   @Override
@@ -43,7 +44,11 @@ public class FireAndForget implements RabbitMQPublisherStresser {
   @Override
   public Future<Void> init(String exchange) {
     this.exchange = exchange;
-    return channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
+    return connection.openChannel()
+            .compose(chann -> {
+              this.channel = chann;
+              return channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+            })
             ;
   }
 

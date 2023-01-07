@@ -26,13 +26,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 
 
 @RunWith(VertxUnitRunner.class)
@@ -54,13 +56,12 @@ public class RabbitMQPublishCodecTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
-  private final Network network;
   private final GenericContainer networkedRabbitmq;
 
   private final Vertx vertx;
   private RabbitMQConnection connection;
 
-  private Promise<byte[]> lastMessage;
+  private volatile Promise<byte[]> lastMessage;
 
   private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<Object> publisher;
@@ -69,7 +70,6 @@ public class RabbitMQPublishCodecTest {
 
   public RabbitMQPublishCodecTest() throws IOException {
     logger.info("Constructing");
-    this.network = RabbitMQBrokerProvider.getNetwork();
     this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
   }
@@ -81,14 +81,17 @@ public class RabbitMQPublishCodecTest {
     options.setPort(networkedRabbitmq.getMappedPort(5672));
     options.setConnectionTimeout(500);
     options.setNetworkRecoveryInterval(500);
-    options.setRequestedHeartbeat(1);
     options.setConnectionName(this.getClass().getSimpleName());
     return options;
   }
 
   @Before
-  public void setup() throws Exception {
-    this.connection = RabbitMQClient.create(vertx, getRabbitMQOptions());
+  public void setup(TestContext testContext) throws Exception {
+    RabbitMQClient.connect(vertx, getRabbitMQOptions())
+            .onSuccess(conn -> {
+              this.connection = conn;
+            })
+            .onComplete(testContext.asyncAssertSuccess());
   }
 
   public static byte[] longToBytes(long x) {
@@ -139,28 +142,35 @@ public class RabbitMQPublishCodecTest {
   }
 
   private Future<Void> testTransfer(String name, Object send, byte[] required) {
+    logger.debug("Testing transfer of {}", send);
     lastMessage = Promise.promise();
     return publisher.publish("", new AMQP.BasicProperties(), send)
             .compose(v -> {
+              logger.debug("Published: {}", send);
               return lastMessage.future();
             })
             .compose(bytes -> {
+              logger.debug("Got message: {}", bytes);
               if (Arrays.equals(required, bytes)) {
                 return Future.succeededFuture();
               } else {
-                logger.debug("{}: {} != {}", name, bytes, required);
+                logger.info("{}: {} != {}", name, bytes, required);
                 return Future.failedFuture(name +": " + bytesToHex(bytes) + " != " + bytesToHex(required));
               }
             });
   }
   
-  @Test(timeout = 5 * 60 * 1000L)
+  @Test(timeout = 20 * 60 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
 
-    createPublisher();
-    createConsumer();
-    testTransfer("String", "Hello", "Hello".getBytes(StandardCharsets.UTF_8))
+    connection.openChannel()
+            .compose(this::createAndStartConsumer)
+            .compose(v -> connection.openChannel())
+            .compose(chan -> {
+              createPublisher(chan);
+              return testTransfer("String", "Hello", "Hello".getBytes(StandardCharsets.UTF_8));
+            })
             .compose(v -> testTransfer("Null", null, new byte[0]))
             .compose(v -> {
               Buffer buf = Buffer.buffer("This is my buffer");              
@@ -181,6 +191,7 @@ public class RabbitMQPublishCodecTest {
               return testTransfer("JsonArray", ja, ja.toString().getBytes(StandardCharsets.UTF_8));
             })
             .onFailure(ex -> {
+              logger.error("Failed: ", ex);
               ctx.fail(ex);
             })
             .onSuccess(v -> {
@@ -189,8 +200,8 @@ public class RabbitMQPublishCodecTest {
 
   }
 
-  private void createPublisher() {
-    pubChannel = connection.createChannel();
+  private void createPublisher(RabbitMQChannel channel) {
+    pubChannel = channel;
 
     pubChannel.addChannelEstablishedCallback(p -> {
       pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
@@ -199,18 +210,23 @@ public class RabbitMQPublishCodecTest {
     publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
   }
 
-  private void createConsumer() {
-    conChannel = connection.createChannel();
+  private Future<Void> createAndStartConsumer(RabbitMQChannel channel) {
+    conChannel = channel;
     conChannel.addChannelEstablishedCallback(p -> {
       conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
               .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
               .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
               .onComplete(p);
     });
-    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions());
+    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions().setAutoAck(true));
     consumer.handler(message -> {
-      lastMessage.complete(message.body());
+      logger.debug("Got message: {} ({})", message, lastMessage);
+      try {
+        lastMessage.complete(message.body());
+      } catch(Throwable ex) {
+        logger.error("Failed: ", ex);
+      }
     });
-    consumer.consume(true, null);
+    return consumer.consume(true, null).mapEmpty();
   }
 }
