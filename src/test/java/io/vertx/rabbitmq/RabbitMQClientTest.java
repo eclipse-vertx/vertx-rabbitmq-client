@@ -23,7 +23,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import org.junit.AfterClass;
-import org.junit.ClassRule;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,11 +44,16 @@ public class RabbitMQClientTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientTest.class);
   
-  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
   
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
+
   @AfterClass
   public static void shutdown() {
-    container.stop();
+    CONTAINER.stop();
   }
   
   @Rule
@@ -217,7 +222,7 @@ public class RabbitMQClientTest {
   
   public RabbitMQOptions config() {
     RabbitMQOptions config = new RabbitMQOptions();
-    config.setUri("amqp://" + container.getHost() + ":" + container.getMappedPort(5672));
+    config.setUri("amqp://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5672));
     config.setConnectionName(this.getClass().getSimpleName());
     return config;
   }

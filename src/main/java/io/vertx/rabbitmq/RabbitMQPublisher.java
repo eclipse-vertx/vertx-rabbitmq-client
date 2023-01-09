@@ -21,6 +21,13 @@ import io.vertx.core.Future;
 public interface RabbitMQPublisher<T> {
   
   /**
+   * Get the channel that is dedicated to this publisher.
+   * @return the channel that is dedicated to this publisher.
+   */
+  @GenIgnore
+  RabbitMQChannel getChannel();
+  
+  /**
    * Publish a message. 
    * 
    * @param routingKey the routing key
@@ -33,12 +40,19 @@ public interface RabbitMQPublisher<T> {
   Future<Void> publish(String routingKey, AMQP.BasicProperties properties, T body);
 
   /**
-   * Prevent any future asynchronous behaviour.
+   * Prevent any outstanding asynchronous behaviour.
    * Any deliveries that are pending confirmations will be discarded and no attempt will be made to resend any messages.
    * Note that this does not disable any confirmations coming from RabbitMQ and it is not necessary to restart the publisher to send messages again.
    * If confirmations are received from RabbitMQ for deliveries that have been discarded they will be logged, but otherwise not do anything.
+   * @return A Future that will be completed when the publisher has paused.
+   */
+  Future<Void> pause();
+
+  /**
+   * Shutdown the publisher, prevent any future use and free up all resources.
+   * Any deliveries that are pending confirmations will be discarded and no attempt will be made to resend any messages.
    * @return A Future that will be completed when the publisher has stopped.
    */
-  Future<Void> stop();
+  Future<Void> cancel();
   
 }

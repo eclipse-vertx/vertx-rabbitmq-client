@@ -26,10 +26,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -56,31 +55,36 @@ public class RabbitMQPublishCodecTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
-  private final GenericContainer networkedRabbitmq;
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
 
   private final Vertx vertx;
   private RabbitMQConnection connection;
 
   private volatile Promise<byte[]> lastMessage;
 
-  private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<Object> publisher;
-  private RabbitMQChannel conChannel;
   private RabbitMQConsumer<byte[]> consumer;
 
   public RabbitMQPublishCodecTest() throws IOException {
     logger.info("Constructing");
-    this.networkedRabbitmq = RabbitMQBrokerProvider.getRabbitMqContainer();
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
+  }
+
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
+
+  @AfterClass
+  public static void shutdown() {
+    CONTAINER.stop();
   }
 
   private RabbitMQOptions getRabbitMQOptions() {
     RabbitMQOptions options = new RabbitMQOptions();
 
-    options.setHost("localhost");
-    options.setPort(networkedRabbitmq.getMappedPort(5672));
-    options.setConnectionTimeout(500);
-    options.setNetworkRecoveryInterval(500);
+    options.setHost(CONTAINER.getHost());
+    options.setPort(CONTAINER.getMappedPort(5672));
     options.setConnectionName(this.getClass().getSimpleName());
     return options;
   }
@@ -164,11 +168,9 @@ public class RabbitMQPublishCodecTest {
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
 
-    connection.openChannel()
-            .compose(this::createAndStartConsumer)
-            .compose(v -> connection.openChannel())
-            .compose(chan -> {
-              createPublisher(chan);
+    createConsumer(connection)
+            .compose(v -> createPublisher(connection))
+            .compose(v -> {
               return testTransfer("String", "Hello", "Hello".getBytes(StandardCharsets.UTF_8));
             })
             .compose(v -> testTransfer("Null", null, new byte[0]))
@@ -190,6 +192,9 @@ public class RabbitMQPublishCodecTest {
               ja.add("Bob");
               return testTransfer("JsonArray", ja, ja.toString().getBytes(StandardCharsets.UTF_8));
             })
+            .compose(v -> consumer.cancel())
+            .compose(v -> publisher.cancel())
+            .compose(v -> connection.close())
             .onFailure(ex -> {
               logger.error("Failed: ", ex);
               ctx.fail(ex);
@@ -199,34 +204,40 @@ public class RabbitMQPublishCodecTest {
             });
 
   }
-
-  private void createPublisher(RabbitMQChannel channel) {
-    pubChannel = channel;
-
-    pubChannel.addChannelEstablishedCallback(p -> {
-      pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .onComplete(p);
-    });
-    publisher = pubChannel.createPublisher(TEST_EXCHANGE, new RabbitMQPublisherOptions());
+  
+  private Future<Void> channelOpenedHandlerPublisher(RabbitMQChannel channel) {
+    return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
   }
 
-  private Future<Void> createAndStartConsumer(RabbitMQChannel channel) {
-    conChannel = channel;
-    conChannel.addChannelEstablishedCallback(p -> {
-      conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
-              .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
-              .onComplete(p);
-    });
-    consumer = conChannel.createConsumer(TEST_QUEUE, new RabbitMQConsumerOptions().setAutoAck(true));
-    consumer.handler(message -> {
-      logger.debug("Got message: {} ({})", message, lastMessage);
-      try {
-        lastMessage.complete(message.body());
-      } catch(Throwable ex) {
-        logger.error("Failed: ", ex);
-      }
-    });
-    return consumer.consume(true, null).mapEmpty();
+  private Future<Void> createPublisher(RabbitMQConnection connection) {
+    return connection.createPublisher(this::channelOpenedHandlerPublisher, null, TEST_EXCHANGE, new RabbitMQPublisherOptions())
+            .compose(pub -> {
+              this.publisher = pub;
+              return Future.succeededFuture();
+            });
+  }
+
+  private Future<Void> channelOpenedHandlerConsumer(RabbitMQChannel channel) {
+    return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+              .compose(v -> channel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
+              .compose(v -> channel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
+              ;
+  }
+  
+  private void messageHandler(RabbitMQMessage<byte[]> message) {
+    logger.debug("Got message: {} ({})", message, lastMessage);
+    try {
+      lastMessage.complete(message.body());
+    } catch(Throwable ex) {
+      logger.error("Failed: ", ex);
+    }
+  }
+
+  private Future<Void> createConsumer(RabbitMQConnection connection) {
+    return connection.createConsumer(this::channelOpenedHandlerConsumer, TEST_QUEUE, new RabbitMQConsumerOptions(), this::messageHandler)
+            .compose(con -> {
+              this.consumer = con;
+              return Future.succeededFuture();
+            });
   }
 }

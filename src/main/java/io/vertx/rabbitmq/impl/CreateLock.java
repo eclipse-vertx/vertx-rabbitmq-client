@@ -45,36 +45,11 @@ public class CreateLock<T> {
   private Future<T> createFuture;
   private boolean creating;
   private T value;
-  private final List<Handler<Promise<Void>>> postCreateHandlers = new ArrayList<>();
+  private final Function<T, Future<T>> postCreateHandler;
 
-  public CreateLock(ValueTest<T> test) {
+  public CreateLock(ValueTest<T> test, Function<T, Future<T>> postCreateHandler) {
     this.test = test == null ? v -> true : test;
-  }
-  
-  public void addPostCreateHandler(Handler<Promise<Void>> postCreateHandler) {
-    synchronized(lock) {
-      postCreateHandlers.add(postCreateHandler);
-    }
-  }
-  
-  private void postCreateHandler(T val, AsyncResult<Void> prevResult, Iterator<Handler<Promise<Void>>> iter, Promise<T> createPromise) {
-    try {
-      if (prevResult != null && prevResult.failed()) {
-        createPromise.fail(prevResult.cause());
-      } else {
-        if (iter.hasNext()) {
-          Handler<Promise<Void>> next = iter.next();
-          Promise<Void> callbackPromise = Promise.promise();
-          next.handle(callbackPromise);
-          callbackPromise.future().onComplete(result -> postCreateHandler(val, result, iter, createPromise));
-        } else {
-          createPromise.complete(val);
-        }
-      }
-    } catch (Throwable ex) {
-      logger.error("Exception whilst running post create handler: ", ex);
-      createPromise.fail(ex);
-    }
+    this.postCreateHandler = postCreateHandler;
   }
   
   public <R> Future<R> create(
@@ -101,16 +76,8 @@ public class CreateLock<T> {
               createFuture = null;
             }
           });
-          List<Handler<Promise<Void>>> callbacks;
-          synchronized(lock) {
-            callbacks = new ArrayList<>(postCreateHandlers);
-          } 
-          if (!callbacks.isEmpty()) {
-            createFuture = createFuture.compose(val -> {
-              Promise<T> postCreatePromise = Promise.promise();
-              postCreateHandler(val, null, callbacks.iterator(), postCreatePromise);
-              return postCreatePromise.future();
-            });
+          if (postCreateHandler != null) {
+            createFuture = createFuture.compose(postCreateHandler);
           }
         }
         if (!creating) {

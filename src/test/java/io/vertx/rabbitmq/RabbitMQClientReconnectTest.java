@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -58,7 +59,7 @@ public class RabbitMQClientReconnectTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
-  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
   private Proxy proxy;
   
   private final Vertx vertx;
@@ -73,9 +74,7 @@ public class RabbitMQClientReconnectTest {
   private final Promise<Long> allMessagesSent = Promise.promise();
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
-  private RabbitMQChannel pubChannel;
   private RabbitMQPublisher<String> publisher;
-  private RabbitMQChannel conChannel;
   private RabbitMQConsumer<String> consumer;
   
   public RabbitMQClientReconnectTest() throws IOException {
@@ -83,9 +82,14 @@ public class RabbitMQClientReconnectTest {
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
   }
 
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
+
   @AfterClass
   public static void shutdown() {
-    container.stop();
+    CONTAINER.stop();
   }
 
   private RabbitMQOptions getRabbitMQOptions() {
@@ -106,7 +110,7 @@ public class RabbitMQClientReconnectTest {
   
   @Before
   public void setup(TestContext testContext) throws Exception {
-    this.proxy = new Proxy(vertx, container.getMappedPort(5672));
+    this.proxy = new Proxy(vertx, CONTAINER.getMappedPort(5672));
     this.proxy.startProxy();
     
     RabbitMQClient.connect(vertx, getRabbitMQOptions())
@@ -125,10 +129,7 @@ public class RabbitMQClientReconnectTest {
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     this.ctx = ctx;
     Async async = ctx.async();
-    
-    connection.openChannel().onSuccess(this::createAndStartProducer).onFailure(ctx::fail);
-    connection.openChannel().onSuccess(this::createAndStartConsumer).onFailure(ctx::fail);
-    
+        
     // Have to react to allMessagesSent completing in case it completes after the last message is received.
     allMessagesSent.future().onSuccess(count -> {
       synchronized(receivedMessages) {
@@ -138,16 +139,19 @@ public class RabbitMQClientReconnectTest {
       }
     });
     
-    firstMessagesReceived.future()
+    createConsumer()
+            .compose(v -> createPublisher())
+            .compose(v -> {
+              sendMessages();
+              return firstMessagesReceived.future();
+            })
             .compose(v -> breakConnection())
             .compose(v -> messageSentAfterShutdown.future())
             .compose(v -> reestablishConnection())
             .compose(v -> allMessagesSent.future())
             .compose(v -> allMessagesReceived.future())
-            .compose(v -> publisher.stop())
-            .compose(v -> pubChannel.close())
+            .compose(v -> publisher.cancel())
             .compose(v -> consumer.cancel())
-            .compose(v -> conChannel.close())
             .compose(v -> connection.close())
             .onComplete(ar -> {
               if (ar.succeeded()) {
@@ -160,14 +164,22 @@ public class RabbitMQClientReconnectTest {
 
   }
 
-  private void createAndStartProducer(RabbitMQChannel channel) {
-    pubChannel = channel;
-   
-    pubChannel.addChannelEstablishedCallback(p -> {
-      pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .onComplete(p);
-    });
-    publisher = pubChannel.createPublisher(new RabbitMQStringMessageCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions());
+  private Future<Void> createPublisher() {
+    return connection.createPublisher(
+            channel -> {
+              return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
+            }
+            , new RabbitMQStringMessageCodec()
+            , TEST_EXCHANGE
+            , new RabbitMQPublisherOptions())
+            .compose(pub -> {              
+              publisher = pub;
+              return Future.succeededFuture();
+            })
+            ;    
+  }
+  
+  private void sendMessages() {
     AtomicLong counter = new AtomicLong();
     AtomicLong postShutdownCount = new AtomicLong(20);
     AtomicLong timerId = new AtomicLong();
@@ -191,43 +203,36 @@ public class RabbitMQClientReconnectTest {
     }));
   }
 
-  private void createAndStartConsumer(RabbitMQChannel channel) {
-    
-    conChannel = channel;
-    conChannel.addChannelEstablishedCallback(p -> {
-      conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
-              .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
-              .onComplete(p);
-    });
-    conChannel.addChannelShutdownHandler(sse -> {
-      hasShutdown.set(true);
-    });
-    
-    consumer = conChannel.createConsumer(new RabbitMQStringMessageCodec(), TEST_QUEUE, new RabbitMQConsumerOptions());
-    consumer.handler(message -> {
-      Long index = Long.parseLong(message.body());
-      synchronized(receivedMessages) {
-        receivedMessages.add(index);
-        if (receivedMessages.size() > 5) {
-          firstMessagesReceived.tryComplete();
-        }
-        logger.info("Received message: {} (have {})", index, receivedMessages.size());
-        Future<Long> allMessagesSentFuture = allMessagesSent.future();
-        if (allMessagesSentFuture.isComplete() && (receivedMessages.size() == allMessagesSentFuture.result())) {
-          allMessagesReceived.tryComplete();
-        }
-      }
-      conChannel.basicAck(message.consumerTag(), message.envelope().getDeliveryTag(), false);
-    });
-    consumer.consume(false, null)
-            .onComplete(ar -> { 
-              if (ar.failed()) {
-                ctx.fail(ar.cause());
-              } else {
-                logger.info("Consumer started: {}", ar );
-              } })
-            ;
+  private Future<Void> createConsumer() {
+    return connection.createConsumer(channel -> {
+              return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+                      .compose(v -> channel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
+                      .compose(v -> channel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
+                      ;
+              }
+            , new RabbitMQStringMessageCodec()
+            , TEST_QUEUE
+            , null
+            , new RabbitMQConsumerOptions()
+            , message -> {
+              Long index = Long.valueOf(message.body());
+              synchronized(receivedMessages) {
+                receivedMessages.add(index);
+                if (receivedMessages.size() > 5) {
+                  firstMessagesReceived.tryComplete();
+                }
+                logger.info("Received message: {} (have {})", index, receivedMessages.size());
+                Future<Long> allMessagesSentFuture = allMessagesSent.future();
+                if (allMessagesSentFuture.isComplete() && (receivedMessages.size() == allMessagesSentFuture.result())) {
+                  allMessagesReceived.tryComplete();
+                }
+              }
+              this.consumer.getChannel().basicAck(message.consumerTag(), message.envelope().getDeliveryTag(), false);
+            })
+            .compose(con -> {
+              this.consumer = con;
+              return Future.succeededFuture();
+            });
   }
 
   private Future<Void> breakConnection() {
@@ -236,6 +241,7 @@ public class RabbitMQClientReconnectTest {
       proxy.stopProxy();
       logger.info("Blocked proxy");
       promise.complete();      
+      hasShutdown.set(true);
     });
   }
   

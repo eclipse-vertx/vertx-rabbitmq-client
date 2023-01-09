@@ -33,14 +33,13 @@ public class Publisher implements RabbitMQPublisherStresser {
 
   private static final Logger log = LoggerFactory.getLogger(Publisher.class);
   
-  private final Vertx vertx;
   private final RabbitMQConnection connection;
-  private RabbitMQChannel channel;
   private RabbitMQPublisher publisher;
   private final boolean withRetries;
+  
+  private String exchange;
 
   public Publisher(Vertx vertx, RabbitMQConnection connection, boolean withRetries) {
-    this.vertx = vertx;
     this.connection = connection;
     this.withRetries = withRetries;
   }
@@ -49,23 +48,23 @@ public class Publisher implements RabbitMQPublisherStresser {
   public String getName() {
     return "Future publisher 2 " + (withRetries ? "with" : "without") + " retries";
   }
+  
+  private Future<Void> channelOpenedHandler(RabbitMQChannel channel) {
+    return channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+  }
 
   @Override
   public Future<Void> init(String exchange) {
-    return connection.openChannel()
-            .compose(chann -> {
-              this.channel = chann;
-              channel.addChannelEstablishedCallback(promise -> {
-                channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null).onComplete(promise);
-              });
-              channel.createPublisher(exchange, new RabbitMQPublisherOptions().setResendOnReconnect(withRetries));
+    return connection.createPublisher(this::channelOpenedHandler, null, exchange, new RabbitMQPublisherOptions().setResendOnReconnect(withRetries))
+            .compose(pub -> {
+              this.publisher = pub;
               return Future.succeededFuture();
             });
   }
   
   @Override
   public Future<Void> shutdown() {
-    return channel.close();
+    return publisher.cancel();
   }
 
   @Override

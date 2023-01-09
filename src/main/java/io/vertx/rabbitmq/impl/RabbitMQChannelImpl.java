@@ -19,7 +19,6 @@ import com.rabbitmq.client.Recoverable;
 import com.rabbitmq.client.RecoveryListener;
 import com.rabbitmq.client.ShutdownListener;
 import com.rabbitmq.client.ShutdownSignalException;
-import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -27,6 +26,7 @@ import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.rabbitmq.AsyncHandler;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConsumer;
@@ -65,45 +65,24 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   private final int retries;
   private volatile boolean closed;
   private volatile boolean confirmSelected;
-  private final CreateLock<Channel> createLock = new CreateLock<>(c -> c.isOpen());
+  private final CreateLock<Channel> createLock;
   
 
 
-  public RabbitMQChannelImpl(Vertx vertx, RabbitMQConnectionImpl connection, RabbitMQOptions options) {
+  public RabbitMQChannelImpl(Vertx vertx, RabbitMQConnectionImpl connection, RabbitMQOptions options, AsyncHandler channelOpenedHandler) {
     this.vertx = vertx;
     this.connection = connection;
     this.retries = options.getReconnectAttempts();
     this.context = vertx.getOrCreateContext();
-    this.codecManager = new RabbitMQCodecManager();
+    this.codecManager = new RabbitMQCodecManager();    
+    this.createLock = new CreateLock<>(
+            c -> c.isOpen()
+            , channelOpenedHandler == null ? null : c -> channelOpenedHandler.handle(this).map(v -> c)
+    );
   }
 
   public RabbitMQCodecManager getCodecManager() {
     return codecManager;
-  }
-  
-  @Override
-  public Future<Void> addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback) {
-    createLock.addPostCreateHandler(channelEstablishedCallback);
-    if (channelId != null) {
-      Promise<Void> promise = Promise.promise();
-      channelEstablishedCallback.handle(promise);
-      return promise.future();
-    } else {
-      return Future.succeededFuture();
-    }
-  }
-  
-  /**
-   * The same as addChannelEstablishedCallback but does not call the callbacks immediately.
-   * 
-   * See {@link RabbitMQChannel#addChannelEstablishedCallback(io.vertx.core.Handler)}.
-   * 
-   * This method just adds the callback that will be used if the channel has to be reestablished.
-   * 
-   * @param channelEstablishedCallback 
-   */
-  public void addChannelEstablishedCallbackPassively(Handler<Promise<Void>> channelEstablishedCallback) {
-    createLock.addPostCreateHandler(channelEstablishedCallback);
   }
   
   @Override
@@ -118,26 +97,6 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     synchronized(shutdownHandlers) {
       shutdownHandlers.add(handler);
     }
-  }
-
-  @Override
-  public RabbitMQPublisher<Object> createPublisher(String exchange, RabbitMQPublisherOptions options) {
-    return this.<Object>createPublisher(null, exchange, options);
-  }
-
-  @Override
-  public <T> RabbitMQPublisher<T> createPublisher(RabbitMQMessageCodec<T> codec, String exchange, RabbitMQPublisherOptions options) {
-    return new RabbitMQPublisherImpl(vertx, this, codec, exchange, options);
-  }
-
-  @Override
-  public RabbitMQConsumer<byte[]> createConsumer(String queue, RabbitMQConsumerOptions options) {
-    return createConsumer(new RabbitMQByteArrayMessageCodec(), queue, options);
-  }
-
-  @Override
-  public <T> RabbitMQConsumer<T> createConsumer(RabbitMQMessageCodec<T> codec, String queue, RabbitMQConsumerOptions options) {
-    return new RabbitMQConsumerImpl(vertx, vertx.getOrCreateContext(), this, codec, queue, options);    
   }
 
   @Override

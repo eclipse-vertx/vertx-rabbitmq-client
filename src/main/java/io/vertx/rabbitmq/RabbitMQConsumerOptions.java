@@ -13,6 +13,8 @@ package io.vertx.rabbitmq;
 import io.vertx.codegen.annotations.DataObject;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonObject;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * Aimed to specify queue consumer settings when calling {@link RabbitMQClient#basicConsumer(String, QueueOptions, Handler)}
@@ -23,13 +25,16 @@ public class RabbitMQConsumerOptions {
   private static final int DEFAULT_QUEUE_SIZE = Integer.MAX_VALUE;
   private static final boolean DEFAULT_AUTO_ACK = true;
   private static final boolean DEFAULT_KEEP_MOST_RECENT = false;
+  private static final boolean DEFAULT_EXCLUSIVE = false;
   private static final long DEFAULT_RECONNECT_INTERVAL = 1000;
 
   private boolean autoAck = DEFAULT_AUTO_ACK;
   private boolean keepMostRecent = DEFAULT_KEEP_MOST_RECENT;
+  private boolean exclusive = DEFAULT_EXCLUSIVE;
   private int maxInternalQueueSize = DEFAULT_QUEUE_SIZE;
   private long reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
 
+  private Map<String, Object> arguments = Collections.EMPTY_MAP;
 
   public RabbitMQConsumerOptions() {
   }
@@ -97,6 +102,27 @@ public class RabbitMQConsumerOptions {
     return keepMostRecent;
   }
 
+  /**
+   * true if this is an exclusive consumer.
+   * @return true if this is an exclusive consumer.
+   */
+  public boolean isExclusive() {
+    return exclusive;
+  }
+
+  /**
+   * Set whether or not this is an exclusive consumer.
+   * <p>
+   * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
+   * It is recommended that this be set to false, be sure you understand the implications and have read 
+   * <a href="https://www.rabbitmq.com/consumers.html#single-active-consumer">https://www.rabbitmq.com/consumers.html#single-active-consumer</a> before setting to true.
+   * <p>
+   * @param exclusive true if this is an exclusive consumer.
+   */
+  public void setExclusive(boolean exclusive) {
+    this.exclusive = exclusive;
+  }  
+
   public long getReconnectInterval() {
     return reconnectInterval;
   }
@@ -105,6 +131,25 @@ public class RabbitMQConsumerOptions {
     this.reconnectInterval = reconnectInterval;
     return this;
   }
+
+  /**
+   * Get custom arguments to be used in the call to basicConsume.
+   * 
+   * @return
+   */
+  public Map<String, Object> getArguments() {
+    return arguments;
+  }
+
+  /**
+   * Set custom arguments to be used in the call to basicConsume.
+   * 
+   * @param arguments 
+   */
+  public void setArguments(Map<String, Object> arguments) {
+    this.arguments = arguments;
+  }
+  
   
   
 }

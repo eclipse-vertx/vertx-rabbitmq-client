@@ -16,10 +16,8 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.ConfirmCallback;
 import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.ShutdownSignalException;
-import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Promise;
 import java.util.Map;
 
 /**
@@ -29,36 +27,8 @@ import java.util.Map;
 public interface RabbitMQChannel {
   
   /**
-   * Set a callback to be called whenever this channel is established.
-   * This callback must be idempotent - it will be called each time a connection is established, which may be multiple times against the same instance.
-   * Callbacks will be added to a list and called in the order they were added, the only way to remove callbacks is to create a new channel.
-   *
-   * These callbacks should be used to establish any Rabbit MQ server objects that are required - exchanges, queues, bindings, etc.
-   * Each callback will receive a Promise<Void> that it must complete in order to pass control to the next callback (or back to the RabbitMQClient).
-   * If the callback fails the promise the RabbitMQClient will be unable to make a connection (it will attempt to connect again according to its retry configuration).
-   * If the promise is not completed or failed by a callback the RabbitMQClient will not start (it will hang indefinitely).
-   *
-   * Other methods on the client may be used in the callback -
-   * it is specifically expected that RabbitMQ objects will be declared, but the publish and consume methods must not be used.
-   *
-   * The connection established callbacks are particularly important with the RabbitMQPublisher and RabbitMQConsumer when they are used with
-   * servers that may failover to another instance of the server that does not have the same exchanges/queues configured on it.
-   * In this situation these callbacks are the only opportunity to create exchanges, queues and bindings before the client will attempt to use them when it
-   * re-establishes connection.
-   * If your failover cluster is guaranteed to have the appropriate objects already configured then it is not necessary to use the callbacks (though should be harmless to do so).
-   * 
-   * The callback will be called immediately if the channel has already been established (which will usually be the case) and the Future from that call
-   * will be returned.
-   *
-   * @param channelEstablishedCallback  callback to be called whenever a new channel is established.
-   * @return 
-   */
-  @GenIgnore
-  Future<Void> addChannelEstablishedCallback(Handler<Promise<Void>> channelEstablishedCallback);
-  
-  /**
    * Add a callback that will be called whenever the channel completes its own internal recovery process.
-   * This callback must be idempotent - it will be called each time a connection is established, which may be multiple times against the same instance.
+   * This callback must be idempotent - it will be called each time a connection is re-established, which may be multiple times against the same instance.
    * Callbacks will be added to a list and called in the order they were added, the only way to remove callbacks is to create a new channel.
    * 
    * This callback is only useful if RabbitMQOptions.automaticRecoveryEnabled is true.
@@ -73,45 +43,7 @@ public interface RabbitMQChannel {
   void addChannelRecoveryCallback(Handler<Channel> channelRecoveryCallback);
   
   void addChannelShutdownHandler(Handler<ShutdownSignalException> handler);
-  
-  /**
-   * Creates a RabbitMQPublisher on this channel that reliably sends messages.
-   * @param exchange The exchange that messages are to be sent to.
-   * @param options Options for configuring the publisher.
-   * @return a RabbitMQPublisher on this channel that reliably sends messages.
-   */
-  RabbitMQPublisher<Object> createPublisher(String exchange, RabbitMQPublisherOptions options);
-      
-  /**
-   * Creates a RabbitMQPublisher on this channel that reliably sends messages.
-   * @param <T> The type of data that will be passed in to the Publisher.
-   * @param codec The codec that will be used to encode the messages passed in to the Publisher.
-   * @param exchange The exchange that messages are to be sent to.
-   * @param options Options for configuring the publisher.
-   * @return a RabbitMQPublisher on this channel that reliably sends messages.
-   */
-  <T> RabbitMQPublisher<T> createPublisher(RabbitMQMessageCodec<T> codec, String exchange, RabbitMQPublisherOptions options);
-
-  /**
-   * Create a RabbitMQConsumer on this channel that reliably receives messages.
-   * @param queue The queue that messages are being pushed from.
-   * @param options Options for configuring the consumer.
-   * @return a RabbitMQConsumer on this channel that can reliably receives messages.
-   * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
-   */
-  RabbitMQConsumer<byte[]> createConsumer(String queue, RabbitMQConsumerOptions options);
-  
-  /**
-   * Create a RabbitMQConsumer on this channel that reliably receives messages.
-   * @param <T> The type of data that will be received by the Consumer.
-   * @param codec The codec that will be used to decode the messages received by the Consumer.
-   * @param queue The queue that messages are being pushed from.
-   * @param options Options for configuring the consumer.
-   * @return a RabbitMQConsumer on this channel that can reliably receives messages.
-   * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
-   */
-  <T> RabbitMQConsumer<T> createConsumer(RabbitMQMessageCodec<T> codec, String queue, RabbitMQConsumerOptions options);
-  
+    
   Future<Void> addConfirmHandler(Handler<RabbitMQConfirmation> confirmListener);
   
   /**

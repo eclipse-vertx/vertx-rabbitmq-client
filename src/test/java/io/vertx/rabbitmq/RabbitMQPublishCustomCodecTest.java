@@ -16,12 +16,10 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
-import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
@@ -29,9 +27,9 @@ import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 
 import static org.junit.Assert.assertEquals;
+import org.junit.BeforeClass;
 
 @RunWith(VertxUnitRunner.class)
 public class RabbitMQPublishCustomCodecTest {
@@ -52,7 +50,7 @@ public class RabbitMQPublishCustomCodecTest {
   private static final boolean DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE = false;
   private static final boolean DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE = false;
 
-  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
 
   private final Vertx vertx;
   private RabbitMQConnection connection;
@@ -69,11 +67,21 @@ public class RabbitMQPublishCustomCodecTest {
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
   }
 
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
+
+  @AfterClass
+  public static void shutdown() {
+    CONTAINER.stop();
+  }
+
   private RabbitMQOptions getRabbitMQOptions() {
     RabbitMQOptions options = new RabbitMQOptions();
 
     options.setHost("localhost");
-    options.setPort(container.getMappedPort(5672));
+    options.setPort(CONTAINER.getMappedPort(5672));
     options.setConnectionTimeout(500);
     options.setNetworkRecoveryInterval(500);
     options.setRequestedHeartbeat(1);
@@ -88,11 +96,6 @@ public class RabbitMQPublishCustomCodecTest {
               this.connection = conn;
             })
             .onComplete(testContext.asyncAssertSuccess());
-  }
-
-  @AfterClass
-  public static void shutdown() {
-    container.stop();
   }
   
   private static final byte[] HEX_ARRAY = "0123456789ABCDEF".getBytes(StandardCharsets.US_ASCII);
@@ -134,47 +137,49 @@ public class RabbitMQPublishCustomCodecTest {
 
   @Test(timeout = 1 * 60 * 1000L)
   public void testPublishMessageWithCodec(TestContext ctx) throws Exception {
-    Async async = ctx.async();
-
-    connection.openChannel().compose(this::createAndStartConsumer)
-            .compose(v -> connection.openChannel())
+    createConsumer(connection)
+            .compose(v -> {
+              return createPublisher(connection);
+            })
             .compose(chan -> {
-              createPublisher(chan);
               return testTransfer("CustomClass", new CustomClass(19L, "random", 27.435), new CustomClass(19L, "random", 27.435));
             })
-            .onFailure(ex -> {
-              ctx.fail(ex);
-            })
-            .onSuccess(v -> {
-              async.complete();
+            .compose(v -> consumer.cancel())
+            .compose(v -> publisher.cancel())
+            .compose(v -> connection.close())
+            .onComplete(ctx.asyncAssertSuccess())
+            ;
+
+  }
+
+  private Future<Void> channelOpenedHandlerPublisher(RabbitMQChannel channel) {
+    return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
+  }
+  
+  private Future<Void> createPublisher(RabbitMQConnection connection) {
+    return connection.createPublisher(this::channelOpenedHandlerPublisher, new CustomClassCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions())
+            .compose(pub -> {
+              publisher = pub;
+              return Future.succeededFuture();
             });
-
   }
 
-  private void createPublisher(RabbitMQChannel channel) {
-    pubChannel = channel;
-    pubChannel.registerCodec(new CustomClassCodec());    
-
-    pubChannel.addChannelEstablishedCallback(p -> {
-      pubChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .onComplete(p);
-    });
-    publisher = pubChannel.createPublisher(new CustomClassCodec(), TEST_EXCHANGE, new RabbitMQPublisherOptions());
+  private Future<Void> channelOpenedHandlerConsumer(RabbitMQChannel channel) {
+    return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+            .compose(v -> channel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
+            .compose(v -> channel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
+            ;
   }
-
-  private Future<Void> createAndStartConsumer(RabbitMQChannel channel) {
-    conChannel = channel;
-    conChannel.registerCodec(new CustomClassCodec());    
-    conChannel.addChannelEstablishedCallback(p -> {
-      conChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .compose(v -> conChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
-              .compose(v -> conChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
-              .onComplete(p);
-    });
-    consumer = conChannel.createConsumer(new CustomClassCodec(), TEST_QUEUE, new RabbitMQConsumerOptions());
-    consumer.handler(message -> {
-      lastMessage.complete(message.body());
-    });
-    return consumer.consume(true, null).mapEmpty();
+  
+  private void messageHandler(RabbitMQMessage<CustomClass> message) {
+    lastMessage.complete(message.body());
+  }
+  
+  private Future<Void> createConsumer(RabbitMQConnection connection) {
+    return connection.createConsumer(this::channelOpenedHandlerConsumer, new CustomClassCodec(), TEST_QUEUE, null, new RabbitMQConsumerOptions(), this::messageHandler)            
+            .compose(con -> {
+              consumer = con;
+              return Future.succeededFuture();
+            });
   }
 }

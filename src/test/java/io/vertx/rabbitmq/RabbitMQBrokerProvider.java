@@ -43,10 +43,10 @@ public class RabbitMQBrokerProvider {
                 .withNetwork(network)
                 //.withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("TestContainer")))
                       ;
-      rabbitmq.start();
-      logger.info("Started test instance of RabbitMQ with ports {}"
-              , rabbitmq.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmq.getMappedPort((Integer) p))).collect(Collectors.toList())
-      );
+//      rabbitmq.start();
+//      logger.info("Started test instance of RabbitMQ with ports {}"
+//              , rabbitmq.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmq.getMappedPort((Integer) p))).collect(Collectors.toList())
+//      );
     }
     return rabbitmq;
   }
@@ -62,10 +62,10 @@ public class RabbitMQBrokerProvider {
                 .withExposedPorts(5671, 5672, 15672)
                 //.withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("TestContainer")))
                 ;
-      rabbitmq.start();
-      logger.info("Started test instance of RabbitMQ with ports {}"
-            , rabbitmq.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmq.getMappedPort((Integer) p))).collect(Collectors.toList())
-      );
+//      rabbitmq.start();
+//      logger.info("Started test instance of RabbitMQ with ports {}"
+//            , rabbitmq.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(rabbitmq.getMappedPort((Integer) p))).collect(Collectors.toList())
+//      );
     }
     return rabbitmq;
   }

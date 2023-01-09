@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
 import static org.junit.Assume.assumeTrue;
+import org.junit.BeforeClass;
 
 
 
@@ -45,11 +46,16 @@ public class RabbitMQSslTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslTest.class);
   
-  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
+  
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
   
   @AfterClass
   public static void shutdown() {
-    container.stop();
+    CONTAINER.stop();
   }
   
   @Rule
@@ -62,7 +68,7 @@ public class RabbitMQSslTest {
   @Test
   public void testCreateWithInsecureServer(TestContext context) {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
+            .setUri("amqps://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithInsecureServer")
             .setTrustAll(true)
             ;
@@ -92,7 +98,7 @@ public class RabbitMQSslTest {
   @Test
   public void testFailWithInsecureServer(TestContext context) {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
+            .setUri("amqps://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithInsecureServer")
             // .setTrustAll(true)
             ;
@@ -118,7 +124,7 @@ public class RabbitMQSslTest {
   @Test
   public void testCreateWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
+            .setUri("amqps://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setTrustStoreOptions(
@@ -155,7 +161,7 @@ public class RabbitMQSslTest {
   @Test
   public void testCreateWithSslContextFactory(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
+            .setUri("amqps://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setSslContextFactory((String name) -> {
@@ -205,7 +211,7 @@ public class RabbitMQSslTest {
   @Test
   public void testFailWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
+            .setUri("amqps://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             // .setTlsHostnameVerification(false)
             .setTrustStoreOptions(

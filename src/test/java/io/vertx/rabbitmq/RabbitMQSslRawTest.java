@@ -28,6 +28,7 @@ import org.testcontainers.utility.MountableFile;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assume.assumeTrue;
+import org.junit.BeforeClass;
 
 /**
  *
@@ -38,28 +39,18 @@ public class RabbitMQSslRawTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslRawTest.class);
   
-  private static final GenericContainer container = getRabbitMqContainer();  
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();  
+  
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
   
   @AfterClass
   public static void shutdown() {
-    container.stop();
+    CONTAINER.stop();
   }
  
-  public static GenericContainer getRabbitMqContainer() {
-    GenericContainer container = new GenericContainer("rabbitmq:3.11.5-management-alpine")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/rabbitmq.conf"), "/etc/rabbitmq/rabbitmq.conf")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/ca/ca_certificate.pem"), "/etc/rabbitmq/ca_certificate.pem")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/server/server_certificate.pem"), "/etc/rabbitmq/server_certificate.pem")
-          .withCopyFileToContainer(MountableFile.forClasspathResource("/ssl-server/server/private_key.pem"), "/etc/rabbitmq/server_key.pem")
-          .withExposedPorts(5671, 5672, 15672)
-                ;
-    container.start();
-    logger.info("Started test instance of RabbitMQ with ports {}"
-            , container.getExposedPorts().stream().map(p -> Integer.toString((Integer) p) + ":" + Integer.toString(container.getMappedPort((Integer) p))).collect(Collectors.toList())
-    );
-    return container;
-  }
-  
   public static String getPublicAmqpInstance() throws Exception {
     Properties props = new Properties();
     try (InputStream stream = RabbitMQSslRawTest.class.getResourceAsStream("/public-amqp.properties")) {
@@ -77,7 +68,7 @@ public class RabbitMQSslRawTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(container.getMappedPort(5671));
+    factory.setPort(CONTAINER.getMappedPort(5671));
 
     Connection conn = factory.newConnection();
     assertNotNull(conn);
@@ -108,7 +99,7 @@ public class RabbitMQSslRawTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(container.getMappedPort(5671));
+    factory.setPort(CONTAINER.getMappedPort(5671));
 
     Connection conn = factory.newConnection();
     assertNotNull(conn);
@@ -169,7 +160,7 @@ public class RabbitMQSslRawTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(container.getMappedPort(5671));
+    factory.setPort(CONTAINER.getMappedPort(5671));
 
     Connection conn = factory.newConnection("testSslWithSslContextFactory");
     assertNotNull(conn);

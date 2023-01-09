@@ -20,9 +20,24 @@ public class RabbitMQConsumerOptionsConverter {
   public static void fromJson(Iterable<java.util.Map.Entry<String, Object>> json, RabbitMQConsumerOptions obj) {
     for (java.util.Map.Entry<String, Object> member : json) {
       switch (member.getKey()) {
+        case "arguments":
+          if (member.getValue() instanceof JsonObject) {
+            java.util.Map<String, java.lang.Object> map = new java.util.LinkedHashMap<>();
+            ((Iterable<java.util.Map.Entry<String, Object>>)member.getValue()).forEach(entry -> {
+              if (entry.getValue() instanceof Object)
+                map.put(entry.getKey(), entry.getValue());
+            });
+            obj.setArguments(map);
+          }
+          break;
         case "autoAck":
           if (member.getValue() instanceof Boolean) {
             obj.setAutoAck((Boolean)member.getValue());
+          }
+          break;
+        case "exclusive":
+          if (member.getValue() instanceof Boolean) {
+            obj.setExclusive((Boolean)member.getValue());
           }
           break;
         case "keepMostRecent":
@@ -49,7 +64,13 @@ public class RabbitMQConsumerOptionsConverter {
   }
 
   public static void toJson(RabbitMQConsumerOptions obj, java.util.Map<String, Object> json) {
+    if (obj.getArguments() != null) {
+      JsonObject map = new JsonObject();
+      obj.getArguments().forEach((key, value) -> map.put(key, value));
+      json.put("arguments", map);
+    }
     json.put("autoAck", obj.isAutoAck());
+    json.put("exclusive", obj.isExclusive());
     json.put("keepMostRecent", obj.isKeepMostRecent());
     json.put("maxInternalQueueSize", obj.getMaxInternalQueueSize());
     json.put("reconnectInterval", obj.getReconnectInterval());

@@ -27,6 +27,7 @@ import org.testcontainers.containers.GenericContainer;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
+import org.junit.BeforeClass;
 
 /**
  * These tests require the client to provide a valid certificate.
@@ -37,11 +38,16 @@ public class RabbitMQSslRawPeerTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslRawTest.class);
   
-  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
+  
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
   
   @AfterClass
   public static void shutdown() {
-    container.stop();
+    CONTAINER.stop();
   }
   
   public static String getPublicAmqpInstance() throws Exception {
@@ -80,7 +86,7 @@ public class RabbitMQSslRawPeerTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(container.getMappedPort(5671));    
+    factory.setPort(CONTAINER.getMappedPort(5671));    
 
     Connection conn = factory.newConnection();
     assertNotNull(conn);
@@ -110,7 +116,7 @@ public class RabbitMQSslRawPeerTest {
     factory.useNio();
     // factory.enableHostnameVerification();
     factory.setHost("localhost");
-    factory.setPort(container.getMappedPort(5671));    
+    factory.setPort(CONTAINER.getMappedPort(5671));    
 
     try {
       factory.newConnection();

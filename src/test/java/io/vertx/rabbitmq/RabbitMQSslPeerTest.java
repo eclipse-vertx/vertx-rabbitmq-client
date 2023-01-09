@@ -17,7 +17,7 @@ import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.RunTestOnContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import org.junit.AfterClass;
-import org.junit.ClassRule;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -36,11 +36,16 @@ public class RabbitMQSslPeerTest {
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQSslPeerTest.class);
   
-  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainerWithPeerValidation();
+  
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
   
   @AfterClass
   public static void shutdown() {
-    container.stop();
+    CONTAINER.stop();
   }
 
   @Rule
@@ -53,7 +58,7 @@ public class RabbitMQSslPeerTest {
   @Test
   public void testCreateWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
+            .setUri("amqps://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setTrustStoreOptions(
@@ -95,7 +100,7 @@ public class RabbitMQSslPeerTest {
   @Test
   public void testFailWithoutPeerCertCreateWithSpecificCert(TestContext context) throws Exception {
     RabbitMQOptions config = new RabbitMQOptions()
-            .setUri("amqps://" + container.getHost() + ":" + container.getMappedPort(5671))
+            .setUri("amqps://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5671))
             .setConnectionName(this.getClass().getSimpleName() + "testCreateWithSpecificCert")
             .setTlsHostnameVerification(false)
             .setKeyStoreOptions(

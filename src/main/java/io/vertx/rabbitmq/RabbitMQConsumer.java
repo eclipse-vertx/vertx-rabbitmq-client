@@ -10,13 +10,12 @@
   */
 package io.vertx.rabbitmq;
 
-import io.vertx.codegen.annotations.Fluent;
+import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.streams.ReadStream;
-import java.util.Map;
 
 /**
  * A stream of messages from a rabbitmq queue.
@@ -34,14 +33,20 @@ public interface RabbitMQConsumer<T> extends ReadStream<RabbitMQMessage<T>> {
    * 
    * @param exclusive true if this is an exclusive consumer.
    * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
-   * It is recommended that this be set to false
-   * , be sure you understand the implications and have read 
+   * It is recommended that this be set to false, be sure you understand the implications and have read 
    * <a href="https://www.rabbitmq.com/consumers.html#single-active-consumer">https://www.rabbitmq.com/consumers.html#single-active-consumer</a> before setting to true.
    * @param arguments a set of arguments for the consume
    * Set to null unless there is a good reason not to.
    * @return A Future containing either the consumerTag associated with the new consumer or a failure.
    */
-  Future<String> consume(boolean exclusive, Map<String, Object> arguments);
+  // Future<String> consume(boolean exclusive, Map<String, Object> arguments);
+  
+  /**
+   * Get the channel that is dedicated to this consumer.
+   * @return the channel that is dedicated to this consumer.
+   */
+  @GenIgnore
+  RabbitMQChannel getChannel();
   
   /**
    * Set an exception handler on the read stream.
@@ -88,20 +93,6 @@ public interface RabbitMQConsumer<T> extends ReadStream<RabbitMQMessage<T>> {
   RabbitMQConsumer<T> endHandler(Handler<Void> endHandler);
 
   /**
-   * @return the name of the queue
-   */
-  String queueName();
-  
-  /**
-   * Set the name of the queue.
-   * This method is typically only required during a connectionEstablishedCallback when the queue name has changed.
-   * @param name the name of the queue
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  RabbitMQConsumer<T> setQueueName(String name);
-  
-  /**
    * @return a consumer tag
    */
   String consumerTag();
@@ -109,7 +100,8 @@ public interface RabbitMQConsumer<T> extends ReadStream<RabbitMQMessage<T>> {
   /**
    * Stop message consumption from a queue.
    * <p>
-   * The operation is asynchronous. When consumption is stopped, you can also be notified via {@link RabbitMQConsumer#endHandler(Handler)}
+   * The operation is asynchronous. When consumption is stopped, you can also be notified via {@link RabbitMQConsumer#endHandler(Handler)}.
+   * The channel that was opened for this consumer will be closed.
    * 
    * @return a future through which you can find out the operation status.
    */

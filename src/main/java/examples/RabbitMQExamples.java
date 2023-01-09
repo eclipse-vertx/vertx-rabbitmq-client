@@ -331,53 +331,53 @@ public class RabbitMQExamples {
   }  
   
   public void connectionEstablishedCallback(RabbitMQChannel channel) {
-    channel.addChannelEstablishedCallback(p -> {
-      channel.exchangeDeclare(EXCHANGE_NAME, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .compose(v -> channel.queueDeclare(QUEUE_NAME, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
-              .compose(v -> channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null))
-              .onComplete(p);
-    });
+//    channel.addChannelEstablishedCallback(p -> {
+//      channel.exchangeDeclare(EXCHANGE_NAME, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+//              .compose(v -> channel.queueDeclare(QUEUE_NAME, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
+//              .compose(v -> channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null))
+//              .onComplete(p);
+//    });
   }
   
   public void connectionEstablishedCallbackForServerNamedAutoDeleteQueue(RabbitMQChannel channel) {
-    AtomicReference<RabbitMQConsumer> consumer = new AtomicReference<>();
-    channel.addChannelEstablishedCallback(promise -> {
-      // Note that the use of of an auto-delete queue will cause message loss when a connection drops, but new messages should be received after recovery.
-      channel.exchangeDeclare(EXCHANGE_NAME, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-              .compose(v -> channel.queueDeclare("", false, true, true, null))
-              .compose(brokerQueueName -> {
-                logger.info("Queue declared as " + brokerQueueName);
-
-                // The first time this runs there will be no existing consumer
-                // on subsequent connections the consumer needs to be update with the new queue name
-                RabbitMQConsumer<Long> currentConsumer = consumer.get();
-
-                if (currentConsumer != null) {
-                  currentConsumer.setQueueName(brokerQueueName);
-                } else {
-                  currentConsumer = channel.createConsumer(new RabbitMQLongMessageCodec(), brokerQueueName, new RabbitMQConsumerOptions());
-                  currentConsumer.handler(message -> {
-                    logger.log(Level.INFO, "Got message {0} from {1}", new Object[]{message.body(), brokerQueueName});
-                  });
-                  consumer.set(currentConsumer);
-                  currentConsumer.consume(true, null);
-                }
-                return channel.queueBind(brokerQueueName, EXCHANGE_NAME, "", null);
-              })
-              .onComplete(promise);
-    });
+//    AtomicReference<RabbitMQConsumer> consumer = new AtomicReference<>();
+//    channel.addChannelEstablishedCallback(promise -> {
+//      // Note that the use of of an auto-delete queue will cause message loss when a connection drops, but new messages should be received after recovery.
+//      channel.exchangeDeclare(EXCHANGE_NAME, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
+//              .compose(v -> channel.queueDeclare("", false, true, true, null))
+//              .compose(brokerQueueName -> {
+//                logger.info("Queue declared as " + brokerQueueName);
+//
+//                // The first time this runs there will be no existing consumer
+//                // on subsequent connections the consumer needs to be update with the new queue name
+//                RabbitMQConsumer<Long> currentConsumer = consumer.get();
+//
+//                if (currentConsumer != null) {
+//                  currentConsumer.setQueueName(brokerQueueName);
+//                } else {
+//                  currentConsumer = channel.createConsumer(new RabbitMQLongMessageCodec(), brokerQueueName, new RabbitMQConsumerOptions());
+//                  currentConsumer.handler(message -> {
+//                    logger.log(Level.INFO, "Got message {0} from {1}", new Object[]{message.body(), brokerQueueName});
+//                  });
+//                  consumer.set(currentConsumer);
+//                  currentConsumer.consume(true, null);
+//                }
+//                return channel.queueBind(brokerQueueName, EXCHANGE_NAME, "", null);
+//              })
+//              .onComplete(promise);
+//    });
   }
  
   /**
    * @see RabbitMQPublishCustomCodecTest )
    */
   public void createConsumerWithCodec(RabbitMQChannel channel) {
-    channel.registerCodec(new CustomClassCodec());    
-    RabbitMQConsumer<CustomClass> consumer = channel.createConsumer(new CustomClassCodec(), "queue", new RabbitMQConsumerOptions());
-    consumer.handler(message -> {
-      CustomClass cc = message.body();
-    });
-    consumer.consume(true, null);
+//    channel.registerCodec(new CustomClassCodec());    
+//    RabbitMQConsumer<CustomClass> consumer = channel.createConsumer(new CustomClassCodec(), "queue", new RabbitMQConsumerOptions());
+//    consumer.handler(message -> {
+//      CustomClass cc = message.body();
+//    });
+//    consumer.consume(true, null);
   }
   
   public void basicConsume() {

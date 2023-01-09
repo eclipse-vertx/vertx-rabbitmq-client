@@ -22,7 +22,6 @@ import io.vertx.ext.unit.junit.RunTestOnContext;
 import io.vertx.ext.unit.junit.Timeout;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import io.vertx.rabbitmq.RabbitMQBrokerProvider;
-import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQOptions;
@@ -40,7 +39,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.AfterClass;
-import org.junit.ClassRule;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -61,11 +60,16 @@ public class RabbitMQPublisherPerformanceTest {
   private static final long WARMUP_ITERATIONS = 10 * 1000;
   private static final long ITERATIONS = 50 * 1000;
   
-  private static final GenericContainer container = RabbitMQBrokerProvider.getRabbitMqContainer();
+  private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
+  
+  @BeforeClass
+  public static void startup() {
+    CONTAINER.start();
+  }
   
   @AfterClass
   public static void shutdown() {
-    container.stop();
+    CONTAINER.stop();
   }
   
   @Rule
@@ -103,7 +107,7 @@ public class RabbitMQPublisherPerformanceTest {
       }
     });
     RabbitMQOptions config = new RabbitMQOptions();
-    config.setUri("amqp://" + container.getHost() + ":" + container.getMappedPort(5672));
+    config.setUri("amqp://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(5672));
     config.setConnectionName(this.getClass().getSimpleName());
     config.setHeartbeatExecutor(heartbeatSvc);
     config.setSharedExecutor(execSvc);

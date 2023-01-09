@@ -64,7 +64,7 @@ public class CreateLockTest {
     
     Async async = ctx.async();
     
-    CreateLock<TestClass> lock = new CreateLock<>(TestClass::test);    
+    CreateLock<TestClass> lock = new CreateLock<>(TestClass::test, null);
     
     List<Future> futures = new ArrayList<>();
     for (int i = 0; i < 10; ++i) {

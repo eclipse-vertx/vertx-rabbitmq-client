@@ -23,6 +23,9 @@ import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.streams.impl.InboundBuffer;
+import io.vertx.rabbitmq.AsyncHandler;
+import io.vertx.rabbitmq.RabbitMQChannel;
+import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQMessage;
@@ -30,6 +33,7 @@ import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  *
@@ -39,38 +43,92 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
 
   private static final Logger log = LoggerFactory.getLogger(RabbitMQConsumerImpl.class);
 
-  private final RabbitMQChannelImpl channel;
+  private final RabbitMQConnection connection;
   private final Vertx vertx;
   private final Context vertxContext;
 
+  private RabbitMQChannel channel;
   private Handler<Throwable> exceptionHandler;
   private Handler<Void> endHandler;
-  private String queueName;  
+  private Supplier<String> queueNameSupplier;  
   private volatile String consumerTag;
   private final boolean keepMostRecent;
   private final InboundBuffer<RabbitMQMessage<T>> pending;
   private final int maxQueueSize;
   private volatile boolean cancelled;
   private final long reconnectInterval;
-  private boolean exclusive;
+  private final boolean exclusive;
   private final AtomicLong consumeCount = new AtomicLong();
-  private Map<String, Object> arguments;
+  private final Map<String, Object> arguments;
   private final ConsumerBridge bridge;
   private final RabbitMQMessageCodec<T> messageCodec;
 
-  public RabbitMQConsumerImpl(Vertx vertx, Context vertxContext, RabbitMQChannelImpl channel, RabbitMQMessageCodec<T> messageCodec, String queueName, RabbitMQConsumerOptions options) {
-    this.channel = channel;
-
+  public static <T> Future<RabbitMQConsumer<T>> create(
+          Vertx vertx
+          , Context context
+          , RabbitMQConnection connection
+          , AsyncHandler<RabbitMQChannel> channelOpenedHandler
+          , RabbitMQMessageCodec<T> messageCodec
+          , Supplier<String> queueNameSupplier
+          , RabbitMQConsumerOptions options
+          , Handler<RabbitMQMessage<T>> messageHandler
+  ) {
+    
+    RabbitMQConsumerImpl<T> consumer = new RabbitMQConsumerImpl<>(vertx, context, connection, messageCodec, queueNameSupplier, options, messageHandler);
+    return consumer.start(channelOpenedHandler);    
+  }    
+    
+  public RabbitMQConsumerImpl(
+          Vertx vertx
+          , Context vertxContext
+          , RabbitMQConnection connection
+          , RabbitMQMessageCodec<T> messageCodec
+          , Supplier<String> queueNameSupplier
+          , RabbitMQConsumerOptions options
+          , Handler<RabbitMQMessage<T>> messageHandler
+  ) {
     this.vertx = vertx;
     this.vertxContext = vertxContext;
+    this.connection = connection;
     this.keepMostRecent = options.isKeepMostRecent();
     this.maxQueueSize = options.getMaxInternalQueueSize();
     this.pending = new InboundBuffer<>(vertxContext, maxQueueSize);
     pending.resume();
-    this.queueName = queueName;    
+    this.queueNameSupplier = queueNameSupplier;
     this.reconnectInterval = options.getReconnectInterval();
+    this.exclusive = options.isExclusive();
+    this.arguments = options.getArguments();
     this.bridge = new ConsumerBridge();
     this.messageCodec = messageCodec;
+    
+    if (messageHandler != null) {
+      pending.handler(msg -> {
+        try {
+          messageHandler.handle(msg);
+        } catch (Exception e) {
+          handleException(e);
+        }
+      });
+    } else {
+      pending.handler(null);
+    }
+    
+  }
+  
+  public Future<RabbitMQConsumer<T>> start(AsyncHandler<RabbitMQChannel> channelOpenedHandler) {
+    
+    return connection.openChannel(channelOpenedHandler)
+            .compose(chann -> {
+              this.channel = chann;
+              Promise<String> promise = Promise.promise();
+              consume(promise);
+              return promise.future();
+            }).map(this);
+  }  
+
+  @Override
+  public RabbitMQChannel getChannel() {
+    return channel;
   }
   
   private class ConsumerBridge implements Consumer {
@@ -111,14 +169,17 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
       log.info("Got message: " + new String(body));
       RabbitMQMessage<T> msg;
       T value = messageCodec.decodeFromBytes(body);
-      msg = new RabbitMQMessageImpl<T>(value, tag, envelope, properties, null);
+      msg = new RabbitMQMessageImpl<>(value, tag, envelope, properties, null);
       vertxContext.runOnContext(v -> handleMessage(msg));
     }    
   }
 
   private Future<String> consume(Promise<String> promise) {
+    String queueName = queueNameSupplier.get();
     channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, bridge)
-            .onSuccess(consumerTag -> promise.complete(consumerTag))
+            .onSuccess(consumerTag -> {
+              promise.complete(consumerTag);
+            })
             .onFailure(ex -> {              
               if (reconnectInterval > 0 && ! cancelled) {
                 log.debug("Failed to consume " + queueName + " (" + ex.getClass() + ", \"" + ex.getMessage() + "\"), will try again after " + reconnectInterval + "ms");
@@ -131,29 +192,6 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
               }
             });
     return promise.future();
-  }
-
-  @Override
-  public Future<String> consume(boolean exclusive, Map<String, Object> arguments) {
-    if (!consumeCount.compareAndSet(0, 1)) {
-      return Future.failedFuture(new IllegalStateException("consume has already been called"));
-    }
-    this.exclusive = exclusive;
-    this.arguments = arguments;
-    return channel.connect()
-            .compose(v -> consume(Promise.<String>promise()))
-            ;
-  }
-  
-  @Override
-  public String queueName() {
-    return queueName;
-  }
-
-  @Override
-  public RabbitMQConsumer<T> setQueueName(String name) {
-    this.queueName = name;
-    return this;
   }
 
   @Override
@@ -219,6 +257,7 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
     log.debug("Cancelling " + consumerTag);
     cancelled = true;
     channel.basicCancel(consumerTag)
+            .compose(v -> channel.close())
             .onComplete(ar -> {
               if (cancelResult != null) {
                 cancelResult.handle(ar);
