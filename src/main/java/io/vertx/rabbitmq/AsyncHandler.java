@@ -29,5 +29,11 @@ import io.vertx.core.Future;
 @FunctionalInterface
 public interface AsyncHandler<E extends Object> {
 
+  /**
+   * Handle the event.
+   * 
+   * @param e The event.
+   * @return A Future that must be completed when the event has been handled.
+   */
   public Future<Void> handle(E e);
 }

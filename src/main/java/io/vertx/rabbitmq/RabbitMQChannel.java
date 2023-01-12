@@ -21,8 +21,25 @@ import io.vertx.core.Handler;
 import java.util.Map;
 
 /**
- *
+ * A RabbitMQ Channel.
+ * <p>
+ * A channel is used for issuing commands to the RabbitMQ broker.
+ * Channels exist on top of a Connection and multiple Channels can be used for a single Connection.
+ * <p>
+ * The {@link RabbitMQConsumer} and {@link RabbitMQPublisher} classes manage their own channels and it is not necessary
+ * to explicitly use the RabbitMQChannel if using those classes via the factory methods in {@link RabbitMQConnection}.
+ * <p>
+ * In most situations the methods here ensure that the connection and channel are open (performing recovery if appropriate) and then
+ * delegate to the appropriate methods on the {@link com.rabbitmq.client.Channel} class, calling them on a worker thread.
+ * The one exception is {@code basicPublish} which will, if conditions are right, delegate directly to 
+ * {@code Channel.basicPublish}, which is non-blocking because the connection is always using NIO.
+ * <p>
+ * The {@code Channel} class has many overloads to enable callers to use simpler methods.
+ * This class prefers to only provide the fullest method.
+ * <p>
  * @author jtalbut
+ * @see <a href="https://www.rabbitmq.com/channels.html">Channels</a>
+ * @see com.rabbitmq.client.Channel
  */
 public interface RabbitMQChannel {
   
@@ -53,8 +70,26 @@ public interface RabbitMQChannel {
    */
   String getChannelId();
   
+  /**
+   * Abort this channel. 
+   * <p>
+   * Forces the channel to close immediately. 
+   * Any encountered exceptions in the close operation are silently discarded.
+   * <p>
+   * @param closeCode     the close code (See under "Reply Codes" in the AMQP specification)
+   * @param closeMessage  a message indicating the reason for closing the connection
+   * @return a Future that will be completed when the channel has closed.
+   * @see com.rabbitmq.client.Channel#abort(int, java.lang.String) 
+   * @see <a href="https://www.rabbitmq.com/amqp-0-9-1-reference.html#constants">Constants</a>
+   */
   Future<Void> abort(int closeCode, String closeMessage);
   
+  /**
+   * 
+   * @param ackCallback
+   * @param nackCallback
+   * @return 
+   */
   Future<Void> addConfirmListener(ConfirmCallback ackCallback, ConfirmCallback nackCallback);
   
   Future<Void> basicAck(String channelId, long deliveryTag, boolean multiple);
