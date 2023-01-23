@@ -29,7 +29,7 @@ public class RabbitMQConfirmListenerImpl implements ConfirmListener {
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQConfirmListenerImpl.class);
   
   private final Context handlerContext;
-  private final RabbitMQChannel channel;
+  private final int channelNumber;
   private final Handler<RabbitMQConfirmation> handler;
 
   @Override
@@ -44,14 +44,14 @@ public class RabbitMQConfirmListenerImpl implements ConfirmListener {
     this.handlerContext.runOnContext(v -> handleAck(deliveryTag, multiple, false));
   }
   
-  public RabbitMQConfirmListenerImpl(RabbitMQChannel channel, Context context, Handler<RabbitMQConfirmation> handler) {
+  public RabbitMQConfirmListenerImpl(int channelNumber, Context context, Handler<RabbitMQConfirmation> handler) {
+    this.channelNumber = channelNumber;
     this.handlerContext = context;
-    this.channel = channel;
     this.handler = handler;
   }
 
   void handleAck(long deliveryTag, boolean multiple, boolean succeeded) {
-    this.handler.handle(new RabbitMQConfirmation(channel.getChannelId(), deliveryTag, multiple, succeeded));
+    this.handler.handle(new RabbitMQConfirmation(channelNumber, deliveryTag, multiple, succeeded));
   }  
 
 }

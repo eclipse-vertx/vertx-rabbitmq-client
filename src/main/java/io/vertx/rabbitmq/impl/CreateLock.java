@@ -41,9 +41,9 @@ public class CreateLock<T> {
   private Future<T> createFuture;
   private boolean creating;
   private T value;
-  private final Function<T, Future<T>> postCreateHandler;
+  private final Handler<T> postCreateHandler;
 
-  public CreateLock(ValueTest<T> test, Function<T, Future<T>> postCreateHandler) {
+  public CreateLock(ValueTest<T> test, Handler<T> postCreateHandler) {
     this.test = test == null ? v -> true : test;
     this.postCreateHandler = postCreateHandler;
   }
@@ -73,7 +73,15 @@ public class CreateLock<T> {
             }
           });
           if (postCreateHandler != null) {
-            createFuture = createFuture.compose(postCreateHandler);
+            createFuture = createFuture.compose(t -> {
+              try {
+                postCreateHandler.handle(t);
+                return Future.succeededFuture(t);
+              } catch (Throwable ex) {
+                logger.warn("postCreateHandler failed: ", ex);
+                return Future.failedFuture(ex);
+              }
+            });
           }
         }
         if (!creating) {

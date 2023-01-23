@@ -20,13 +20,13 @@ import io.vertx.core.json.JsonObject;
 @DataObject(generateConverter = true)
 public class RabbitMQConfirmation {
   
-  private String channelId;
+  private long channelNumber;
   private long deliveryTag;
   private boolean multiple;
   private boolean succeeded;
 
-  public RabbitMQConfirmation(String channelId, long deliveryTag, boolean multiple, boolean succeeded) {
-    this.channelId = channelId;
+  public RabbitMQConfirmation(long channelNumber, long deliveryTag, boolean multiple, boolean succeeded) {
+    this.channelNumber = channelNumber;
     this.deliveryTag = deliveryTag;
     this.multiple = multiple;
     this.succeeded = succeeded;
@@ -42,8 +42,8 @@ public class RabbitMQConfirmation {
     return json;
   }
 
-  public String getChannelId() {
-    return channelId;
+  public long getChannelNumber() {
+    return channelNumber;
   }
 
   public long getDeliveryTag() {

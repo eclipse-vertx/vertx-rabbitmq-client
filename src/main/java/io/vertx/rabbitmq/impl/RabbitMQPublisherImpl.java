@@ -16,11 +16,10 @@ import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
-import io.vertx.rabbitmq.AsyncHandler;
 import io.vertx.rabbitmq.RabbitMQChannel;
+import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
@@ -44,7 +43,6 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   
   private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
   
-  private final Vertx vertx;
   private final RabbitMQConnection connection;
   private final String exchange;
   private final boolean resendOnReconnect;
@@ -120,15 +118,13 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   }
   
   public static <T> Future<RabbitMQPublisher<T>> create(
-          Vertx vertx
-          , RabbitMQConnection connection
-          , AsyncHandler<RabbitMQChannel> channelOpenedHandler
+            RabbitMQChannelBuilder channelBuilder
           , RabbitMQMessageCodec<T> messageCodec
           , String exchange
           , RabbitMQPublisherOptions options) {
     
-    RabbitMQPublisherImpl<T> publisher = new RabbitMQPublisherImpl<>(vertx, connection, messageCodec, exchange, options);
-    return publisher.start(channelOpenedHandler);    
+    RabbitMQPublisherImpl<T> publisher = new RabbitMQPublisherImpl<>(channelBuilder, messageCodec, exchange, options);
+    return publisher.start(channelBuilder);    
   }    
 
   private Future<Void> performResends(RabbitMQChannel newChannel) {
@@ -153,28 +149,21 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
     }
   }
   
-  public RabbitMQPublisherImpl(Vertx vertx, RabbitMQConnection connection, RabbitMQMessageCodec<T> messageCodec, String exchange, RabbitMQPublisherOptions options) {
-    this.vertx = vertx;
-    this.connection = connection;
+  public RabbitMQPublisherImpl(RabbitMQChannelBuilder channelBuilder, RabbitMQMessageCodec<T> messageCodec, String exchange, RabbitMQPublisherOptions options) {
+    this.connection = channelBuilder.getConnection();
     this.exchange = exchange;
     this.resendOnReconnect = options.isResendOnReconnect();
     this.messageCodec = messageCodec;
   }
   
-  public Future<RabbitMQPublisher<T>> start(AsyncHandler<RabbitMQChannel> channelOpenedHandler) {
-    return connection.openChannel(chann -> {
-      return channelOpenedHandler.handle(chann)
-              .compose(v -> {
-                return chann.addConfirmHandler(confirmation -> handleConfirmation(confirmation));
-              }).compose(v -> {
-                return performResends(chann);
-              });
-    }).compose(chann -> {
-      this.channel = chann;
-      codecManager = ((RabbitMQChannelImpl) channel).getCodecManager();
-      channel.addChannelRecoveryCallback(this::channelRecoveryCallback);
-      return Future.succeededFuture();
-    }).map(this);
+  public Future<RabbitMQPublisher<T>> start(RabbitMQChannelBuilder channelBuilder) {
+    return channelBuilder.withChannelRecoveryCallback(this::channelRecoveryCallback)
+            .withConfirmHandler(confirmation -> handleConfirmation(confirmation))
+            .withChannelOpenHandler(chann -> {
+              performResends(channel);
+            })
+            .openChannel()
+            .map(this);
   }
 
   @Override
@@ -233,7 +222,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   }
   
   private void handleConfirmation(RabbitMQConfirmation rawConfirmation) {
-    log.debug("handleConfirmation(" + rawConfirmation.getChannelId() + ":" + rawConfirmation.getDeliveryTag() + ")");
+    log.debug("handleConfirmation(" + rawConfirmation.getChannelNumber() + ":" + rawConfirmation.getDeliveryTag() + ")");
     List<MessageDetails> toComplete = new ArrayList<>();
     synchronized(promises) {
       if (promises.isEmpty()) {

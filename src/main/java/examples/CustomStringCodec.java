@@ -23,17 +23,12 @@ import java.util.zip.Inflater;
  */
 public class CustomStringCodec implements RabbitMQMessageCodec<String> {
 
-  private final String name;
-  private final String contentType;
+  public static final String NAME = "deflated-utf16";
+  private static final String CONTENT_TYPE = "text/plain";
 
-  public CustomStringCodec() {
-    this.name = "deflated-utf16";
-    this.contentType = "text/plain";
-  }  
-  
   @Override
   public String codecName() {
-    return name;
+    return NAME;
   }
 
   @Override
@@ -64,7 +59,7 @@ public class CustomStringCodec implements RabbitMQMessageCodec<String> {
 
   @Override
   public String getContentType() {
-    return contentType;
+    return CONTENT_TYPE;
   }
 
   @Override

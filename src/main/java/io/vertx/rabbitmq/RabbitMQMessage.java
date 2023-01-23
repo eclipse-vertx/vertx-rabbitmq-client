@@ -15,6 +15,7 @@ import com.rabbitmq.client.Envelope;
 import io.vertx.codegen.annotations.CacheReturn;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 
 /**
@@ -54,4 +55,11 @@ public interface RabbitMQMessage<T> {
    */
   @CacheReturn
   Integer messageCount();
+  
+  RabbitMQChannel getChannel();
+  
+  Future<Void> basicAck();
+  
+  Future<Void> basicNack();
+  
 }

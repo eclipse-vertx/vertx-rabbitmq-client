@@ -15,25 +15,15 @@
  */
 package io.vertx.rabbitmq;
 
-import io.vertx.core.Future;
+import com.rabbitmq.client.Channel;
 
 /**
- *  A generic event handler for asynchronous events.
- *  <p>
+ * Simple Handler class that accepts a Channel and returns a value.
  * 
- * Callers of this interface will suspend processing until the returned Future completes.
- * <p>
- *
- * @param <E> The type of the parameter passed in to the handler.
+ * The handler may also throw an Exception.
+ * 
+ * @author njt
  */
-@FunctionalInterface
-public interface AsyncHandler<E extends Object> {
-
-  /**
-   * Handle the event.
-   * 
-   * @param e The event.
-   * @return A Future that must be completed when the event has been handled.
-   */
-  public Future<Void> handle(E e);
+public interface ChannelFunction<T> {
+    T handle(Channel channel) throws Exception;
 }

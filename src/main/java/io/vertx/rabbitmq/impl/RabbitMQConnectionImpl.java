@@ -21,31 +21,22 @@ import com.rabbitmq.client.ShutdownListener;
 import com.rabbitmq.client.ShutdownSignalException;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
-import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.net.JksOptions;
-import io.vertx.rabbitmq.AsyncHandler;
-import io.vertx.rabbitmq.RabbitMQChannel;
+import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConnection;
-import io.vertx.rabbitmq.RabbitMQConsumer;
-import io.vertx.rabbitmq.RabbitMQConsumerOptions;
-import io.vertx.rabbitmq.RabbitMQMessage;
-import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import io.vertx.rabbitmq.RabbitMQOptions;
-import io.vertx.rabbitmq.RabbitMQPublisher;
-import io.vertx.rabbitmq.RabbitMQPublisherOptions;
-import io.vertx.rabbitmq.impl.codecs.RabbitMQByteArrayMessageCodec;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -83,6 +74,10 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     this.vertx = vertx;
     this.context = vertx.getOrCreateContext();    
     this.config = new RabbitMQOptions(config);
+  }
+
+  public Vertx getVertx() {
+    return vertx;
   }
 
   @Override
@@ -275,11 +270,12 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       cf.setTrafficListener(config.getTrafficListener());
     }    
 
-    Connection conn = addresses == null
-           ? cf.newConnection(config.getConnectionName())
-           : cf.newConnection(addresses, config.getConnectionName());
-    lastConnectedInstance = connectCount.incrementAndGet();
     connectionName = config.getConnectionName();
+    if (connectionName == null || connectionName.isEmpty()) {
+      connectionName = fabricateConnectionName();
+    }
+    Connection conn = addresses == null ? cf.newConnection(connectionName) : cf.newConnection(addresses, connectionName);
+    lastConnectedInstance = connectCount.incrementAndGet();
     conn.setId(Long.toString(lastConnectedInstance));
     logger.info("Established connection to amqp"
             + (cf.isSSL() ? "s" : "")
@@ -334,6 +330,22 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       if (config.isTlsHostnameVerification()) {
         cf.enableHostnameVerification();
       }
+    }
+  }
+  
+  /**
+   * Return a derived named for the connection that should be sufficient to identify it.
+   * <p>
+   * Connection names are very useful for broker adminstrators and should always be provided.
+   * If nothing else can be done this method should return something useful.
+   * <p>
+   * @return 
+   */
+  private String fabricateConnectionName() {
+    try {
+      return ManagementFactory.getRuntimeMXBean().getName();
+    } catch (Throwable ex) {
+      return "JavaProcess";
     }
   }
 
@@ -462,51 +474,15 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   }
 
   @Override
-  public Future<RabbitMQChannel> openChannel() {
-    return openChannel(null);
+  public RabbitMQChannelBuilder createChannelBuilder() {
+    return new RabbitMQChannelBuilder(this);
   }
 
   @Override
-  public Future<RabbitMQChannel> openChannel(AsyncHandler<RabbitMQChannel> channelOpenedHandler) {
-    return new RabbitMQChannelImpl(vertx, this, config, channelOpenedHandler)
-            .connect();
+  public int getConfiguredReconnectAttempts() {
+    return config.getReconnectAttempts();
   }
 
-  @Override
-  public <T> Future<RabbitMQPublisher<T>> createPublisher(
-          AsyncHandler<RabbitMQChannel> channelOpenedHandler
-          , RabbitMQMessageCodec<T> codec
-          , String exchange
-          , RabbitMQPublisherOptions options
-  ) {
-    return RabbitMQPublisherImpl.create(vertx, this, channelOpenedHandler, codec, exchange, options);
-  }
-
-  @Override
-  public Future<RabbitMQConsumer<byte[]>> createConsumer(
-          AsyncHandler<RabbitMQChannel> channelOpenedHandler
-          , String queue
-          , RabbitMQConsumerOptions options
-          , Handler<RabbitMQMessage<byte[]>> messageHandler
-  ) {
-    return createConsumer(channelOpenedHandler, new RabbitMQByteArrayMessageCodec(), queue, null, options, messageHandler);
-  }
-  
-  @Override
-  public <T> Future<RabbitMQConsumer<T>> createConsumer(
-          AsyncHandler<RabbitMQChannel> channelOpenedHandler
-          , RabbitMQMessageCodec<T> codec
-          , String queue
-          , Supplier<String> queueNameSupplier
-          , RabbitMQConsumerOptions options
-          , Handler<RabbitMQMessage<T>> messageHandler
-  ) {
-    if (queueNameSupplier == null) {
-      queueNameSupplier = () -> queue;
-    }
-    return RabbitMQConsumerImpl.create(vertx, vertx.getOrCreateContext(), this, channelOpenedHandler, codec, queueNameSupplier, options, messageHandler);    
-  }
-  
   @Override
   public Future<Void> close(int closeCode, String closeMessage, int timeout) {
     Connection conn = connection;

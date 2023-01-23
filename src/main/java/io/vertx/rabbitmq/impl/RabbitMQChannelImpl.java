@@ -23,14 +23,14 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
-import io.vertx.rabbitmq.AsyncHandler;
+import io.vertx.rabbitmq.ChannelFunction;
 import io.vertx.rabbitmq.RabbitMQChannel;
+import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
+import io.vertx.rabbitmq.RabbitMQManagementChannel;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
-import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,19 +42,18 @@ import java.util.Objects;
  *
  * @author jtalbut
  */
-public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
+public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementChannel, ShutdownListener {
   
   private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelImpl.class);
   
-  private final Vertx vertx;
   private final RabbitMQConnectionImpl connection;
   private final Context context;
   private final RabbitMQCodecManager codecManager;
   
-  private volatile String channelId;
+  private volatile int channelNumber;
   
-  private final List<Handler<Channel>> channelRecoveryCallbacks = new ArrayList<>();
-  private final List<Handler<ShutdownSignalException>> shutdownHandlers = new ArrayList<>();
+  private final List<Handler<Channel>> channelRecoveryCallbacks;
+  private final List<Handler<ShutdownSignalException>> shutdownHandlers;
   private final Object publishLock = new Object();
   private long knownConnectionInstance;
   private final int retries;
@@ -62,50 +61,25 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   private volatile boolean confirmSelected;
   private final CreateLock<Channel> createLock;
   
-
-
-  public RabbitMQChannelImpl(Vertx vertx, RabbitMQConnectionImpl connection, RabbitMQOptions options, AsyncHandler channelOpenedHandler) {
-    this.vertx = vertx;
-    this.connection = connection;
-    this.retries = options.getReconnectAttempts();
-    this.context = vertx.getOrCreateContext();
-    this.codecManager = new RabbitMQCodecManager();    
-    this.createLock = new CreateLock<>(
-            c -> c.isOpen()
-            , channelOpenedHandler == null ? null : c -> channelOpenedHandler.handle(this).map(v -> c)
-    );
+  public RabbitMQChannelImpl(RabbitMQChannelBuilder builder) {
+    this.connection = builder.getConnection();
+    this.retries = connection.getConfiguredReconnectAttempts();
+    this.context = connection.getVertx().getOrCreateContext();
+    this.codecManager = builder.getCodecManager();
+    this.channelRecoveryCallbacks = builder.getChannelRecoveryCallbacks();
+    this.shutdownHandlers = builder.getShutdownHandlers();
+    this.createLock = new CreateLock<>(c -> c.isOpen(), c -> this.onChannel(builder.getChannelOpenHandler()));
   }
 
   public RabbitMQCodecManager getCodecManager() {
     return codecManager;
   }
+
+  @Override
+  public RabbitMQManagementChannel getManagementChannel() {
+    return this;
+  }
   
-  @Override
-  public void addChannelRecoveryCallback(Handler<Channel> channelRecoveryCallback) {
-    synchronized(channelRecoveryCallbacks) {
-      channelRecoveryCallbacks.add(channelRecoveryCallback);
-    }
-  }  
-
-  @Override
-  public void addChannelShutdownHandler(Handler<ShutdownSignalException> handler) {
-    synchronized(shutdownHandlers) {
-      shutdownHandlers.add(handler);
-    }
-  }
-
-  @Override
-  public Future<Void> addConfirmHandler(Handler<RabbitMQConfirmation> confirmHandler) {
-    return onChannel(channel -> {
-
-      RabbitMQConfirmListenerImpl listener = new RabbitMQConfirmListenerImpl(this, vertx.getOrCreateContext(), confirmHandler);
-      channel.addConfirmListener(listener);
-      channel.confirmSelect();
-
-      return null;
-    });
-  }
-    
   @Override
   public Future<Void> confirmSelect() {
 
@@ -128,8 +102,13 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
+  public int getChannelNumber() {
+    return channelNumber;
+  }
+
+  @Override
   public String getChannelId() {
-    return channelId;
+    return connection.getConnectionName() + ":" + Long.toString(knownConnectionInstance) + ":" + channelNumber;
   }
   
   public Future<RabbitMQChannel> connect() {
@@ -144,7 +123,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
                     } else {
                       this.knownConnectionInstance = connection.getConnectionInstance();
                       Channel channel = ar.result();
-                      this.channelId = connection.getConnectionName() + ":" + Long.toString(knownConnectionInstance) + ":" + channel.getChannelNumber();
+                      this.channelNumber = channel.getChannelNumber();
                       channel.addShutdownListener(this);
                       
                       if (channel instanceof Recoverable) {
@@ -183,12 +162,8 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     }
   }
     
-  @FunctionalInterface
-  private interface ChannelHandler<T> {
-    T handle(Channel channel) throws Exception;
-  }
-  
-  private <T> Future<T> onChannel(ChannelHandler<T> handler) {
+  @Override
+  public <T> Future<T> onChannel(ChannelFunction<T> handler) {
     if (closed) {
       return Future.failedFuture("Channel closed");
     }
@@ -208,53 +183,44 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   
   @Override
   public Future<Void> abort(int closeCode, String closeMessage) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    return onChannel(chann -> {
+      chann.abort();
+      return null;
+    });
   }
 
-  @Override
   public Future<Void> addConfirmListener(ConfirmCallback ackCallback, ConfirmCallback nackCallback) {
-    
     return onChannel(channel -> {
       return channel.addConfirmListener(ackCallback, nackCallback);
     }).mapEmpty();
-    
   }
   
   
   @Override
-  public Future<Void> basicAck(String channelId, long deliveryTag, boolean multiple) {
-    
-    if (channelId == null) {
-      return Future.failedFuture(new IllegalArgumentException("channelId may not be null"));
-    }
+  public Future<Void> basicAck(long channelNumber, long deliveryTag, boolean multiple) {
     return onChannel(channel -> {
-      if (channelId.equals(this.channelId)) {
+      if (channelNumber == this.channelNumber) {
         channel.basicAck(deliveryTag, multiple);
       }
       return null;
-    });
-    
-  }
-
-  @Override
-  public Future<Void> basicCancel(String consumerTag) {
-    
-    return onChannel(channel -> {
-      channel.basicCancel(consumerTag);
-      return null;
-    });
-    
+    });    
   }
   
   @Override
   public Future<String> basicConsume(String queue, boolean autoAck, String consumerTag, boolean noLocal, boolean exclusive, Map<String, Object> arguments, Consumer consumer) {
-    
     return onChannel(channel -> {
       return channel.basicConsume(queue, autoAck, consumerTag, noLocal, exclusive, arguments, consumer);
     });
-    
   }
 
+  @Override
+  public Future<Void> basicCancel(String consumerTag) {
+    return onChannel(chann -> {
+      chann.basicCancel(consumerTag);
+      return null;
+    });
+  }
+    
   public static AMQP.BasicProperties setTypeAndEncoding(AMQP.BasicProperties props, String type, String encoding) {
     return new AMQP.BasicProperties.Builder()
             .appId(props.getAppId())
@@ -332,45 +298,45 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
   }
 
   @Override
-  public Future<Void> basicQos(int prefetchSize, int prefetchCount, boolean global) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
-  }
-
-  @Override
   public Future<Void> exchangeDeclare(String exchange, BuiltinExchangeType type, boolean durable, boolean autoDelete, Map<String, Object> arguments) {
-    
     return onChannel(channel -> {
       return channel.exchangeDeclare(exchange, type, durable, autoDelete, arguments);
     }).mapEmpty();
-    
+  }
+
+  @Override
+  public Future<Void> exchangeDeclarePassive(String exchange) {
+    return onChannel(channel -> {
+      return channel.exchangeDeclarePassive(exchange);
+    }).mapEmpty();
   }
 
   @Override
   public Future<Void> exchangeBind(String destination, String source, String routingKey, Map<String, Object> arguments) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    return onChannel(chann -> {
+      return chann.exchangeBind(destination, source, routingKey, arguments);
+    }).mapEmpty();
   }
 
   @Override
   public Future<String> queueDeclare(String queue, boolean durable, boolean exclusive, boolean autoDelete, Map<String, Object> arguments) {
-    
     return onChannel(channel -> {
       return channel.queueDeclare(queue, durable, exclusive, autoDelete, arguments);
     }).map(dok -> dok.getQueue());
-    
   }
 
   @Override
   public Future<Void> queueDeclarePassive(String queue) {
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    return onChannel(channel -> {
+      return channel.queueDeclarePassive(queue);
+    }).mapEmpty();
   }
 
   @Override
   public Future<Void> queueBind(String queue, String exchange, String routingKey, Map<String, Object> arguments) {
-    
     return onChannel(channel -> {
       return channel.queueBind(queue, exchange, routingKey, arguments);
     }).mapEmpty();
-    
   }
 
   @Override
@@ -385,7 +351,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
     if (chann == null || !chann.isOpen()) {
       return Future.succeededFuture();
     }
-    return vertx.executeBlocking(promise -> {
+    return context.executeBlocking(promise -> {
       try {
         chann.close(closeCode, closeMessage);
         promise.complete();
@@ -394,32 +360,5 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, ShutdownListener {
       }
     });
   }
-
-  @Override
-  public <T> RabbitMQChannel registerCodec(RabbitMQMessageCodec<T> codec) {
-    codecManager.registerCodec(codec);
-    return this;
-  }
-
-  @Override
-  public <T> RabbitMQChannel unregisterCodec(String name) {
-    codecManager.unregisterCodec(name);
-    return this;
-  }
-
-  @Override
-  public <T> RabbitMQChannel registerDefaultCodec(Class<T> clazz, RabbitMQMessageCodec<T> codec) {
-    codecManager.registerDefaultCodec(clazz, codec);
-    return this;
-  }
-
-  @Override
-  public <T> RabbitMQChannel unregisterDefaultCodec(Class<T> clazz) {
-    codecManager.unregisterDefaultCodec(clazz);
-    return this;
-  }
-  
-  
-  
   
 }

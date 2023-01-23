@@ -11,13 +11,8 @@
 package io.vertx.rabbitmq;
 
 import com.rabbitmq.client.AMQP;
-import com.rabbitmq.client.BuiltinExchangeType;
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.ConfirmCallback;
 import com.rabbitmq.client.Consumer;
-import com.rabbitmq.client.ShutdownSignalException;
 import io.vertx.core.Future;
-import io.vertx.core.Handler;
 import java.util.Map;
 
 /**
@@ -44,96 +39,55 @@ import java.util.Map;
 public interface RabbitMQChannel {
   
   /**
-   * Add a callback that will be called whenever the channel completes its own internal recovery process.
-   * This callback must be idempotent - it will be called each time a connection is re-established, which may be multiple times against the same instance.
-   * Callbacks will be added to a list and called in the order they were added, the only way to remove callbacks is to create a new channel.
-   * 
-   * This callback is only useful if RabbitMQOptions.automaticRecoveryEnabled is true.
-   * 
-   * Callbacks can be used for any kind of resetting that clients need to perform after the automatic recovery is complete.
-   * 
-   * Callbacks will be called on a RabbitMQ thread, after topology recovery, and will block the completion of the recovery.
-   * Because these callbacks have no interaction with Vertx this is one of the few methods that exposes the raw channel.
-   * 
-   * @param channelRecoveryCallback 
-   */
-  void addChannelRecoveryCallback(Handler<Channel> channelRecoveryCallback);
-  
-  void addChannelShutdownHandler(Handler<ShutdownSignalException> handler);
-    
-  Future<Void> addConfirmHandler(Handler<RabbitMQConfirmation> confirmListener);
-  
-  /**
    * Returns an identifier of the underlying channel.
-   * This is made up of the connection instance and the channel number.
+   * <p>
+   * This is the channelNumber of the current instance of the underlying channel.
+   * <p>
+   * The reconnect mechanism can result in the underlying channel being replaced, which will invalidate
+   * any delivery tags from the previous channel.
+   * Use the channel number to scope any delivery tags that are stored.
+   * <p>
    * @return an identifier of the underlying channel.
    */
+  int getChannelNumber();
+  
+  /**
+   * Returns a unique identifier for the underlying channel with a greater scope than the channel number.
+   * <p>
+   * Unlike the channel number the channel ID should be suitable for identifying the channel on the broker.
+   * <p>
+   * The channel ID is made up of the connection name, the connection instance number and the channel number.
+   * <p>
+   * @return a unique identifier for the underlying channel with a greater scope than the channel number.
+   */
   String getChannelId();
-  
+    
   /**
-   * Abort this channel. 
-   * <p>
-   * Forces the channel to close immediately. 
-   * Any encountered exceptions in the close operation are silently discarded.
-   * <p>
-   * @param closeCode     the close code (See under "Reply Codes" in the AMQP specification)
-   * @param closeMessage  a message indicating the reason for closing the connection
-   * @return a Future that will be completed when the channel has closed.
-   * @see com.rabbitmq.client.Channel#abort(int, java.lang.String) 
-   * @see <a href="https://www.rabbitmq.com/amqp-0-9-1-reference.html#constants">Constants</a>
-   */
-  Future<Void> abort(int closeCode, String closeMessage);
-  
-  /**
+   * Start a consumer. 
    * 
-   * @param ackCallback
-   * @param nackCallback
-   * @return 
+   * @param queue the name of the queue
+   * @param autoAck true if the server should consider messages acknowledged once delivered; false if the server should expect explicit acknowledgements.
+   * Auto acknowledgements should only be used when "at-most-once" semantics are required, it cannot guarantee delivery.
+   * @param consumerTag a client-generated consumer tag to establish context
+   * It is strongly recommended that this be set to a globally unique value as it is needed for tracking of acks.
+   * Setting it to a user-understandable value will help when looking at queue consumers in the RabbitMQ management UI.
+   * @param noLocal True if the server should not deliver to this consumer
+   * messages published on this channel's connection. Note that the RabbitMQ server does not support this flag.
+   * Set to false, unless you are using something other than RabbitMQ.
+   * @param exclusive true if this is an exclusive consumer.
+   * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
+   * It is recommended that this be set to false
+   * , be sure you understand the implications and have read 
+   * <a href="https://www.rabbitmq.com/consumers.html#single-active-consumer">https://www.rabbitmq.com/consumers.html#single-active-consumer</a> before setting to true.
+   * @param arguments a set of arguments for the consume
+   * Set to null unless there is a good reason not to.
+   * @param consumer an interface to the consumer object
+   * @return A Future containing either the consumerTag associated with the new consumer or a failure.
+   * @see com.rabbitmq.client.Channel.basicConsume
+   * @see com.rabbitmq.client.AMQP.Basic.Consume
+   * @see com.rabbitmq.client.AMQP.Basic.ConsumeOk
    */
-  Future<Void> addConfirmListener(ConfirmCallback ackCallback, ConfirmCallback nackCallback);
-  
-  Future<Void> basicAck(String channelId, long deliveryTag, boolean multiple);
-  
-  Future<Void> basicCancel(String consumerTag);
-  
-    /**
-     * Start a consumer. 
-     * 
-     * @param queue the name of the queue
-     * @param autoAck true if the server should consider messages acknowledged once delivered; false if the server should expect explicit acknowledgements.
-     * Auto acknowledgements should only be used when "at-most-once" semantics are required, it cannot guarantee delivery.
-     * @param consumerTag a client-generated consumer tag to establish context
-     * It is strongly recommended that this be set to a globally unique value as it is needed for tracking of acks.
-     * Setting it to a user-understandable value will help when looking at queue consumers in the RabbitMQ management UI.
-     * @param noLocal True if the server should not deliver to this consumer
-     * messages published on this channel's connection. Note that the RabbitMQ server does not support this flag.
-     * Set to false, unless you are using something other than RabbitMQ.
-     * @param exclusive true if this is an exclusive consumer.
-     * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
-     * It is recommended that this be set to false
-     * , be sure you understand the implications and have read 
-     * <a href="https://www.rabbitmq.com/consumers.html#single-active-consumer">https://www.rabbitmq.com/consumers.html#single-active-consumer</a> before setting to true.
-     * @param arguments a set of arguments for the consume
-     * Set to null unless there is a good reason not to.
-     * @param consumer an interface to the consumer object
-     * @return A Future containing either the consumerTag associated with the new consumer or a failure.
-     * @see com.rabbitmq.client.Channel.basicConsume
-     * @see com.rabbitmq.client.AMQP.Basic.Consume
-     * @see com.rabbitmq.client.AMQP.Basic.ConsumeOk
-     */
   Future<String> basicConsume(String queue, boolean autoAck, String consumerTag, boolean noLocal, boolean exclusive, Map<String, Object> arguments, Consumer consumer);
-  
-  Future<Void> basicQos(int prefetchSize, int prefetchCount, boolean global);
-  
-  Future<Void> exchangeDeclare(String exchange, BuiltinExchangeType type, boolean durable, boolean autoDelete, Map<String,Object> arguments);
-  
-  Future<Void> exchangeBind(String destination, String source, String routingKey, Map<String,Object> arguments);
-  
-  Future<String> queueDeclare(String queue, boolean durable, boolean exclusive, boolean autoDelete, Map<String,Object> arguments);
-  
-  Future<Void> queueDeclarePassive(String queue);
-          
-  Future<Void> queueBind(String queue, String exchange, String routingKey, Map<String,Object> arguments);
   
     /**
      * Publish a message.
@@ -167,56 +121,29 @@ public interface RabbitMQChannel {
      * 
      * @see com.rabbitmq.client.Channel.basicPublish
      * @see <a href="https://www.rabbitmq.com/alarms.html">Resource-driven alarms</a>
+     * @see <a href="https://www.rabbitmq.com/publishers.html#protocols">Protocol Differences</a> for details of the mandatory flag
      * @param options options relating to this library's handling of the message
      * @param exchange the exchange to publish the message to
      * @param routingKey the routing key
      * @param mandatory true if the 'mandatory' flag is to be set
+     * If the mandatory flag is set to true the broker will return the message to the publisher if it would be discarded (because there is no queue bound to the exchange).
+     * The message is returned via a registered "returned message handler" ({@link RabbitMQChannelBuilder#withReturnedMessageHandler(io.netty.util.Recycler.Handle)).
      * @param props other properties for the message - routing headers etc
      * @param body the message body
      * @return A Future that will be completed when the message has been sent.
      */
   Future<Void> basicPublish(RabbitMQPublishOptions options, String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, Object body);
   
-  Future<Void> confirmSelect();
-
-  Future<Void> waitForConfirms(long timeout);
-
   Future<Void> close();
   
   Future<Void> close(int closeCode, String closeMessage);
-    
-  /**
-   * Register a message codec.
-   * 
-   * You can register a message codec if you want to send any non standard message to the broker. E.g. you might want to send POJOs directly to the broker.
-   * 
-   * The MessageCodecs used by the RabbitMQ client are compatible with those used by the Vert.x EventBus
-   * , but there are some differences that mean the default implementations are not the same implementations for both:
-   * 
-   * <ul>
-   * <li>The EventBus codecs are natively working with a Buffer that may contain more bytes than the message being processed
-   * RabbitMQ messages are natively considered to be byte arrays, so the Buffer seen by a codec is guaranteed to only be used for that purpose.
-   * <li>EventBus messages are only ever seen by Vert.x clients.
-   * RabbitMQ messages are written by other processes that could have nothing to do with Vert.x.
-   * </ul>
-   * 
-   * The result of these differences is that the RabbitMQ JSON codecs cannot prefix the JSON data with a length value (as the Event Bus Json MessageCodecs do), because that is not
-   * useful and is not the expected behaviour when handling JSON data in a RabbitMQ message.
-   * 
-   * Most of the message codecs for base types are the same (i.e. this library uses the EventBus MessageCodecs for most base types)
-   * , however the logic of the RabbitMQ Boolean MessageCodec is the inverse of the Event Bus Boolean Message Codec - the Rabbit MQ codec uses 1 for true and 0 for false.
-   * RabbitMQ messages tend not to consist of just a single base value, but they can (as long as the recipient expects big-endian values).
-   * 
-   * @param <T> The type that the codec can encode and decode.
-   * @param codec the message codec to register
-   * @return a reference to this, so the API can be used fluently
-   */
-  <T> RabbitMQChannel registerCodec(RabbitMQMessageCodec<T> codec);
   
-  <T> RabbitMQChannel unregisterCodec(String name);
+  Future<Void> basicAck(long channelNumber, long deliveryTag, boolean multiple);
   
-  <T> RabbitMQChannel registerDefaultCodec(Class<T> clazz, RabbitMQMessageCodec<T> codec);
+  Future<Void> basicNack(long channelNumber, long deliveryTag, boolean multiple);
   
-  <T> RabbitMQChannel unregisterDefaultCodec(Class<T> clazz);
+  <T> Future<T> onChannel(ChannelFunction<T> handler);  
+  
+  RabbitMQManagementChannel getManagementChannel();
     
 }

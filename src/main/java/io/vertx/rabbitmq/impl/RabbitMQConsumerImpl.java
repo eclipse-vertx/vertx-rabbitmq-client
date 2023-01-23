@@ -23,9 +23,8 @@ import io.vertx.core.Vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.streams.impl.InboundBuffer;
-import io.vertx.rabbitmq.AsyncHandler;
 import io.vertx.rabbitmq.RabbitMQChannel;
-import io.vertx.rabbitmq.RabbitMQConnection;
+import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConsumer;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQMessage;
@@ -43,14 +42,13 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
 
   private static final Logger log = LoggerFactory.getLogger(RabbitMQConsumerImpl.class);
 
-  private final RabbitMQConnection connection;
   private final Vertx vertx;
   private final Context vertxContext;
 
   private RabbitMQChannel channel;
   private Handler<Throwable> exceptionHandler;
   private Handler<Void> endHandler;
-  private Supplier<String> queueNameSupplier;  
+  private final Supplier<String> queueNameSupplier;  
   private volatile String consumerTag;
   private final boolean keepMostRecent;
   private final InboundBuffer<RabbitMQMessage<T>> pending;
@@ -64,32 +62,23 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
   private final RabbitMQMessageCodec<T> messageCodec;
 
   public static <T> Future<RabbitMQConsumer<T>> create(
-          Vertx vertx
-          , Context context
-          , RabbitMQConnection connection
-          , AsyncHandler<RabbitMQChannel> channelOpenedHandler
+            RabbitMQChannelBuilder channelBuilder
           , RabbitMQMessageCodec<T> messageCodec
           , Supplier<String> queueNameSupplier
           , RabbitMQConsumerOptions options
-          , Handler<RabbitMQMessage<T>> messageHandler
-  ) {
-    
-    RabbitMQConsumerImpl<T> consumer = new RabbitMQConsumerImpl<>(vertx, context, connection, messageCodec, queueNameSupplier, options, messageHandler);
-    return consumer.start(channelOpenedHandler);    
+  ) {    
+    RabbitMQConsumerImpl<T> consumer = new RabbitMQConsumerImpl<>(channelBuilder, messageCodec, queueNameSupplier, options);
+    return consumer.start(channelBuilder);    
   }    
     
   public RabbitMQConsumerImpl(
-          Vertx vertx
-          , Context vertxContext
-          , RabbitMQConnection connection
+          RabbitMQChannelBuilder channelBuilder
           , RabbitMQMessageCodec<T> messageCodec
           , Supplier<String> queueNameSupplier
           , RabbitMQConsumerOptions options
-          , Handler<RabbitMQMessage<T>> messageHandler
   ) {
-    this.vertx = vertx;
-    this.vertxContext = vertxContext;
-    this.connection = connection;
+    this.vertx = channelBuilder.getConnection().getVertx();
+    this.vertxContext = vertx.getOrCreateContext();
     this.keepMostRecent = options.isKeepMostRecent();
     this.maxQueueSize = options.getMaxInternalQueueSize();
     this.pending = new InboundBuffer<>(vertxContext, maxQueueSize);
@@ -100,24 +89,11 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
     this.arguments = options.getArguments();
     this.bridge = new ConsumerBridge();
     this.messageCodec = messageCodec;
-    
-    if (messageHandler != null) {
-      pending.handler(msg -> {
-        try {
-          messageHandler.handle(msg);
-        } catch (Exception e) {
-          handleException(e);
-        }
-      });
-    } else {
-      pending.handler(null);
-    }
-    
   }
   
-  public Future<RabbitMQConsumer<T>> start(AsyncHandler<RabbitMQChannel> channelOpenedHandler) {
+  public Future<RabbitMQConsumer<T>> start(RabbitMQChannelBuilder channelBuilder) {
     
-    return connection.openChannel(channelOpenedHandler)
+    return channelBuilder.openChannel()
             .compose(chann -> {
               this.channel = chann;
               Promise<String> promise = Promise.promise();
@@ -256,7 +232,10 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
   public void cancel(Handler<AsyncResult<Void>> cancelResult) {
     log.debug("Cancelling " + consumerTag);
     cancelled = true;
-    channel.basicCancel(consumerTag)
+    channel.onChannel(chann -> {
+      chann.basicCancel(consumerTag);
+      return null;
+    })
             .compose(v -> channel.close())
             .onComplete(ar -> {
               if (cancelResult != null) {

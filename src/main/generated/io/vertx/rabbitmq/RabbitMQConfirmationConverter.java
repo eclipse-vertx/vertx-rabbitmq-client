@@ -20,7 +20,7 @@ public class RabbitMQConfirmationConverter {
   public static void fromJson(Iterable<java.util.Map.Entry<String, Object>> json, RabbitMQConfirmation obj) {
     for (java.util.Map.Entry<String, Object> member : json) {
       switch (member.getKey()) {
-        case "channelId":
+        case "channelNumber":
           break;
         case "deliveryTag":
           break;
@@ -37,9 +37,7 @@ public class RabbitMQConfirmationConverter {
   }
 
   public static void toJson(RabbitMQConfirmation obj, java.util.Map<String, Object> json) {
-    if (obj.getChannelId() != null) {
-      json.put("channelId", obj.getChannelId());
-    }
+    json.put("channelNumber", obj.getChannelNumber());
     json.put("deliveryTag", obj.getDeliveryTag());
     json.put("multiple", obj.isMultiple());
     json.put("succeeded", obj.isSucceeded());

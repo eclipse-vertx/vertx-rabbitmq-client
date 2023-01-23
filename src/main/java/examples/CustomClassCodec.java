@@ -19,9 +19,11 @@ import io.vertx.rabbitmq.*;
  */
 public class CustomClassCodec implements RabbitMQMessageCodec<CustomClass> {
 
+  public static final String NAME = "customClass";
+  
   @Override
   public String codecName() {
-    return "customClass";
+    return NAME;
   }
 
   @Override
