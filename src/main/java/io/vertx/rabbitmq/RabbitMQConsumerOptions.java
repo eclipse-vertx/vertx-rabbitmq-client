@@ -22,19 +22,23 @@ import java.util.Map;
 @DataObject(generateConverter = true)
 public class RabbitMQConsumerOptions {
 
-  private static final int DEFAULT_QUEUE_SIZE = Integer.MAX_VALUE;
   private static final boolean DEFAULT_AUTO_ACK = true;
-  private static final boolean DEFAULT_KEEP_MOST_RECENT = false;
   private static final boolean DEFAULT_EXCLUSIVE = false;
   private static final long DEFAULT_RECONNECT_INTERVAL = 1000;
+  private static final String DEFAULT_CONSUMER_TAG = "";
 
   private boolean autoAck = DEFAULT_AUTO_ACK;
-  private boolean keepMostRecent = DEFAULT_KEEP_MOST_RECENT;
   private boolean exclusive = DEFAULT_EXCLUSIVE;
-  private int maxInternalQueueSize = DEFAULT_QUEUE_SIZE;
   private long reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
+  private String consumerTag = DEFAULT_CONSUMER_TAG;
 
   private Map<String, Object> arguments = Collections.EMPTY_MAP;
+  
+  private Handler<RabbitMQConsumer> consumerOkHandler;
+  private Handler<RabbitMQConsumer> cancelOkHandler;
+  private Handler<RabbitMQConsumer> cancelHandler;
+  private Handler<RabbitMQConsumer> shutdownSignalHandler;
+  private Handler<RabbitMQConsumer> recoverOkHandler;
 
   public RabbitMQConsumerOptions() {
   }
@@ -50,6 +54,60 @@ public class RabbitMQConsumerOptions {
     return json;
   }
   
+  public RabbitMQConsumerOptions setConsumerOkHandler(Handler<RabbitMQConsumer> handler) {
+    this.consumerOkHandler = handler;
+    return this;
+  }
+  
+  public RabbitMQConsumerOptions setCancelOkHandler(Handler<RabbitMQConsumer> handler) {
+    this.cancelOkHandler = handler;
+    return this;
+  }
+  
+  public RabbitMQConsumerOptions setCancelHandler(Handler<RabbitMQConsumer> handler) {
+    this.cancelHandler = handler;
+    return this;
+  }
+  
+  public RabbitMQConsumerOptions setShutdownSignalHandler(Handler<RabbitMQConsumer> handler) {
+    this.shutdownSignalHandler = handler;
+    return this;
+  }
+
+  public RabbitMQConsumerOptions setConsumerTag(String consumerTag) {
+    this.consumerTag = consumerTag;
+    return this;
+  }
+  
+  public Handler<RabbitMQConsumer> getRecoverOkHandler() {
+    return recoverOkHandler;
+  }
+
+  public RabbitMQConsumerOptions setRecoverOkHandler(Handler<RabbitMQConsumer> recoverOkHandler) {
+    this.recoverOkHandler = recoverOkHandler;
+    return this;
+  }
+  
+  public Handler<RabbitMQConsumer> getConsumerOkHandler() {
+    return consumerOkHandler;
+  }
+
+  public Handler<RabbitMQConsumer> getCancelOkHandler() {
+    return cancelOkHandler;
+  }
+
+  public Handler<RabbitMQConsumer> getCancelHandler() {
+    return cancelHandler;
+  }
+
+  public Handler<RabbitMQConsumer> getShutdownSignalHandler() {
+    return shutdownSignalHandler;
+  }
+
+  public String getConsumerTag() {
+    return consumerTag;
+  }
+  
   /**
    * @param autoAck true if the server should consider messages
    *                acknowledged once delivered; false if the server should expect
@@ -61,45 +119,12 @@ public class RabbitMQConsumerOptions {
   }
 
   /**
-   * @param keepMostRecent {@code true} for discarding old messages instead of recent ones,
-   *                       otherwise use {@code false}
-   */
-  public RabbitMQConsumerOptions setKeepMostRecent(boolean keepMostRecent) {
-    this.keepMostRecent = keepMostRecent;
-    return this;
-  }
-
-
-  /**
-   * @param maxInternalQueueSize the size of internal queue
-   */
-  public RabbitMQConsumerOptions setMaxInternalQueueSize(int maxInternalQueueSize) {
-    this.maxInternalQueueSize = maxInternalQueueSize;
-    return this;
-  }
-
-  /**
    * @return true if the server should consider messages
    * acknowledged once delivered; false if the server should expect
    * explicit acknowledgements
    */
   public boolean isAutoAck() {
     return autoAck;
-  }
-
-  /**
-   * @return the size of internal queue
-   */
-  public int getMaxInternalQueueSize() {
-    return maxInternalQueueSize;
-  }
-
-  /**
-   * @return {@code true} if old messages will be discarded instead of recent ones,
-   * otherwise use {@code false}
-   */
-  public boolean isKeepMostRecent() {
-    return keepMostRecent;
   }
 
   /**
@@ -119,8 +144,9 @@ public class RabbitMQConsumerOptions {
    * <p>
    * @param exclusive true if this is an exclusive consumer.
    */
-  public void setExclusive(boolean exclusive) {
+  public RabbitMQConsumerOptions setExclusive(boolean exclusive) {
     this.exclusive = exclusive;
+    return this;
   }  
 
   public long getReconnectInterval() {
@@ -146,8 +172,9 @@ public class RabbitMQConsumerOptions {
    * 
    * @param arguments 
    */
-  public void setArguments(Map<String, Object> arguments) {
+  public RabbitMQConsumerOptions setArguments(Map<String, Object> arguments) {
     this.arguments = arguments;
+    return this;
   }
   
   

@@ -79,9 +79,9 @@ public class RabbitMQSslPeerTest {
     RabbitMQClient.connect(testRunContext.vertx(), config)
             .compose(conn -> {
               connection[0] = conn;
-              return connection[0].openChannel();
+              return connection[0].createChannelBuilder().openChannel();
             })
-            .compose(channel -> channel.exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
+            .compose(channel -> channel.getManagementChannel().exchangeDeclare("testCreateWithSpecificCert", BuiltinExchangeType.FANOUT, true, true, null))
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 logger.info("Exchange declared");
@@ -118,7 +118,7 @@ public class RabbitMQSslPeerTest {
     RabbitMQClient.connect(testRunContext.vertx(), config)
             .compose(conn -> {
               connection[0] = conn;
-              return connection[0].openChannel();
+              return connection[0].createChannelBuilder().openChannel();
             })
             .onComplete(ar -> {
               if (ar.succeeded()) {

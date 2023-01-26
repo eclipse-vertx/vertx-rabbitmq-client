@@ -70,6 +70,8 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   private final AtomicLong connectCount = new AtomicLong();
   private volatile boolean closed;
   
+  private String connectionTarget;
+  
   public RabbitMQConnectionImpl(Vertx vertx, RabbitMQOptions config) {
     this.vertx = vertx;
     this.context = vertx.getOrCreateContext();    
@@ -159,21 +161,16 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
       configureTlsProtocol(cf);
     }
     if (addresses != null) {
-      logger.info(
-              (connectCount.get() > 0 ? "Rec" : "C")
-              + "onnecting to amqp"
+      connectionTarget = "amqp"
               + (cf.isSSL() ? "s" : "")
               + "://"
               + cf.getUsername()
               + "@"
               + (addresses.size() == 1 ? addresses.get(0) : addresses)
               + "/"
-              + URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
-      );
+              + URLEncoder.encode(cf.getVirtualHost(), "UTF-8");
     } else {
-      logger.info(
-              (connectCount.get() > 0 ? "Rec" : "C")
-              + "onnecting to amqp"
+      connectionTarget = "amqp"
               + (cf.isSSL() ? "s" : "")
               + "://"
               + cf.getUsername()
@@ -182,9 +179,9 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
               + ":"
               + cf.getPort()
               + "/"
-              + URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
-      );
+              + URLEncoder.encode(cf.getVirtualHost(), "UTF-8");
     }
+    logger.info((connectCount.get() > 0 ? "Rec" : "C") + "onnecting to " + connectionTarget);
     
     cf.setConnectionTimeout(config.getConnectionTimeout());
     cf.setShutdownTimeout(config.getShutdownTimeout());
@@ -277,15 +274,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     Connection conn = addresses == null ? cf.newConnection(connectionName) : cf.newConnection(addresses, connectionName);
     lastConnectedInstance = connectCount.incrementAndGet();
     conn.setId(Long.toString(lastConnectedInstance));
-    logger.info("Established connection to amqp"
-            + (cf.isSSL() ? "s" : "")
-            + "://"
-            + cf.getUsername()
-            + "@"
-            + conn.getAddress()
-            + "/"
-            + URLEncoder.encode(cf.getVirtualHost(), "UTF-8")
-    );      
+    logger.info("Established connection to " + connectionTarget);      
     conn.addShutdownListener(this);
     conn.addBlockedListener(new BlockedListener() {
       @Override
@@ -408,7 +397,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
         promise.complete(connection);
       }
     } catch(Throwable ex) {
-      logger.error("Failed to create connection: ", ex);
+      logger.error("Failed to create connection to " + connectionTarget + ": ", ex);
       if (shouldRetryConnection()) {
         vertx.setTimer(config.getReconnectInterval(), time -> {
           vertx.executeBlocking(p -> {

@@ -21,7 +21,6 @@ import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
-import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
 import io.vertx.rabbitmq.RabbitMQPublisher;
@@ -43,7 +42,6 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   
   private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
   
-  private final RabbitMQConnection connection;
   private final String exchange;
   private final boolean resendOnReconnect;
   private final RabbitMQMessageCodec<T> messageCodec;
@@ -150,10 +148,10 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   }
   
   public RabbitMQPublisherImpl(RabbitMQChannelBuilder channelBuilder, RabbitMQMessageCodec<T> messageCodec, String exchange, RabbitMQPublisherOptions options) {
-    this.connection = channelBuilder.getConnection();
     this.exchange = exchange;
     this.resendOnReconnect = options.isResendOnReconnect();
     this.messageCodec = messageCodec;
+    this.codecManager = channelBuilder.getCodecManager();
   }
   
   public Future<RabbitMQPublisher<T>> start(RabbitMQChannelBuilder channelBuilder) {
@@ -163,6 +161,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
               performResends(channel);
             })
             .openChannel()
+            .onSuccess(chann -> this.channel = chann)
             .map(this);
   }
 

@@ -1,28 +1,31 @@
 /*
-  * Copyright (c) 2011-2022 Contributors to the Eclipse Foundation
-  *
-  * This program and the accompanying materials are made available under the
-  * terms of the Eclipse Public License 2.0 which is available at
-  * http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-  * which is available at https://www.apache.org/licenses/LICENSE-2.0.
-  *
-  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-  */
+ * Copyright 2023 Eclipse.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package io.vertx.rabbitmq.impl;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ShutdownSignalException;
-import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
+import static io.vertx.core.Vertx.vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
-import io.vertx.core.streams.impl.InboundBuffer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConsumer;
@@ -30,136 +33,177 @@ import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQMessage;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
  *
- * @author jtalbut
+ * @author njt
  */
-public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
+public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
 
   private static final Logger log = LoggerFactory.getLogger(RabbitMQConsumerImpl.class);
-
-  private final Vertx vertx;
-  private final Context vertxContext;
-
-  private RabbitMQChannel channel;
-  private Handler<Throwable> exceptionHandler;
-  private Handler<Void> endHandler;
-  private final Supplier<String> queueNameSupplier;  
-  private volatile String consumerTag;
-  private final boolean keepMostRecent;
-  private final InboundBuffer<RabbitMQMessage<T>> pending;
-  private final int maxQueueSize;
-  private volatile boolean cancelled;
-  private final long reconnectInterval;
+  
+  private final RabbitMQConnectionImpl connection;
+  private final Handler<RabbitMQConsumer> consumerOkHandler;
+  private final Handler<RabbitMQConsumer> cancelOkHandler;
+  private final Handler<RabbitMQConsumer> cancelHandler;
+  private final Handler<RabbitMQConsumer> shutdownSignalHandler;
+  private final Handler<RabbitMQConsumer> recoverOkHandler;
+  private final long reconnectIntervalMs;
+  private final boolean autoAck;
   private final boolean exclusive;
-  private final AtomicLong consumeCount = new AtomicLong();
   private final Map<String, Object> arguments;
-  private final ConsumerBridge bridge;
+  private final Supplier<String> queueNameSupplier;
+  
   private final RabbitMQMessageCodec<T> messageCodec;
 
-  public static <T> Future<RabbitMQConsumer<T>> create(
-            RabbitMQChannelBuilder channelBuilder
-          , RabbitMQMessageCodec<T> messageCodec
-          , Supplier<String> queueNameSupplier
-          , RabbitMQConsumerOptions options
-  ) {    
-    RabbitMQConsumerImpl<T> consumer = new RabbitMQConsumerImpl<>(channelBuilder, messageCodec, queueNameSupplier, options);
-    return consumer.start(channelBuilder);    
-  }    
-    
-  public RabbitMQConsumerImpl(
+  private final BiFunction<RabbitMQConsumer, RabbitMQMessage<T>, Future<Void>> handler;
+  
+  private RabbitMQChannel channel;
+  private String consumerTag;
+  private boolean cancelled;
+  private final Context vertxContext;
+  private final AtomicLong consumeCount = new AtomicLong();
+
+  public static <U> Future<RabbitMQConsumer> create(
           RabbitMQChannelBuilder channelBuilder
+          , RabbitMQMessageCodec<U> messageCodec
+          , Supplier<String> queueNameSupplier
+          , RabbitMQConsumerOptions options
+          , BiFunction<RabbitMQConsumer, RabbitMQMessage<U>, Future<Void>> handler
+  ) {
+    RabbitMQConsumerImpl<U> consumer = new RabbitMQConsumerImpl<>(
+            channelBuilder
+            , messageCodec
+            , queueNameSupplier
+            , options
+            , handler
+    );
+    return consumer.start(channelBuilder);        
+  }
+
+  public RabbitMQConsumerImpl(RabbitMQChannelBuilder channelBuilder
           , RabbitMQMessageCodec<T> messageCodec
           , Supplier<String> queueNameSupplier
           , RabbitMQConsumerOptions options
+          , BiFunction<RabbitMQConsumer, RabbitMQMessage<T>, Future<Void>> handler
   ) {
-    this.vertx = channelBuilder.getConnection().getVertx();
-    this.vertxContext = vertx.getOrCreateContext();
-    this.keepMostRecent = options.isKeepMostRecent();
-    this.maxQueueSize = options.getMaxInternalQueueSize();
-    this.pending = new InboundBuffer<>(vertxContext, maxQueueSize);
-    pending.resume();
-    this.queueNameSupplier = queueNameSupplier;
-    this.reconnectInterval = options.getReconnectInterval();
+    this.connection = channelBuilder.getConnection();
+    this.consumerOkHandler = options.getConsumerOkHandler();
+    this.cancelOkHandler = options.getCancelOkHandler();
+    this.cancelHandler = options.getCancelHandler();
+    this.shutdownSignalHandler = options.getShutdownSignalHandler();
+    this.recoverOkHandler = options.getRecoverOkHandler();
+    this.reconnectIntervalMs = options.getReconnectInterval();
+    this.autoAck = options.isAutoAck();
     this.exclusive = options.isExclusive();
-    this.arguments = options.getArguments();
-    this.bridge = new ConsumerBridge();
+    this.consumerTag = options.getConsumerTag();
+    this.queueNameSupplier = queueNameSupplier;
+    this.arguments = options.getArguments().isEmpty() ? Collections.emptyMap() : new HashMap<>(options.getArguments());
     this.messageCodec = messageCodec;
+    this.handler = handler;
+    this.vertxContext = connection.getVertx().getOrCreateContext();
   }
   
-  public Future<RabbitMQConsumer<T>> start(RabbitMQChannelBuilder channelBuilder) {
-    
-    return channelBuilder.openChannel()
+  public Future<RabbitMQConsumer> start(RabbitMQChannelBuilder channelBuilder) {
+    return channelBuilder
+            .openChannel()
             .compose(chann -> {
               this.channel = chann;
-              Promise<String> promise = Promise.promise();
-              consume(promise);
-              return promise.future();
-            }).map(this);
-  }  
-
+              Promise<Void> promise = Promise.promise();
+              return consume(promise);
+            })
+            .map(this);
+  }
+  
   @Override
   public RabbitMQChannel getChannel() {
     return channel;
   }
-  
-  private class ConsumerBridge implements Consumer {
-    
-    @Override
-    public void handleConsumeOk(String tag) {
-      log.info("handleConsumeOk " + tag);
-      consumerTag = tag;
-    }
 
-    @Override
-    public void handleCancelOk(String tag) {
-      log.info("handleCancelOk " +tag);
-    }
-
-    @Override
-    public void handleCancel(String tag) throws IOException {
-      log.info("handleCancel " +tag);
-    }
-
-    @Override
-    public void handleShutdownSignal(String tag, ShutdownSignalException sig) {    
-      log.info("handleShutdownSignal " + tag);
-      if ((reconnectInterval > 0) && !cancelled) {
-        long count = consumeCount.incrementAndGet();
-        log.debug("consume count: " + count);        
-        consume(Promise.promise());
-      }
-    }
-
-    @Override
-    public void handleRecoverOk(String tag) {
-      log.info("handleRecoverOk " +tag);
-    }
-
-    @Override
-    public void handleDelivery(String tag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-      log.info("Got message: " + new String(body));
-      RabbitMQMessage<T> msg;
-      T value = messageCodec.decodeFromBytes(body);
-      msg = new RabbitMQMessageImpl<>(value, tag, envelope, properties, null);
-      vertxContext.runOnContext(v -> handleMessage(msg));
-    }    
+  @Override
+  public String getConsumerTag() {
+    return consumerTag;
   }
 
-  private Future<String> consume(Promise<String> promise) {
+  @Override
+  public Future<Void> cancel() {
+    this.cancelled = true;
+    return channel.basicCancel(consumerTag);
+  }
+  
+  @Override
+  public void handleConsumeOk(String consumerTag) {
+    this.consumerTag = consumerTag;
+    if (consumerOkHandler != null) {
+      consumerOkHandler.handle(this);
+    }
+  }
+
+  @Override
+  public void handleCancelOk(String consumerTag) {
+    if (cancelOkHandler != null) {
+      cancelOkHandler.handle(this);
+    }
+  }
+
+  @Override
+  public void handleCancel(String consumerTag) throws IOException {
+    if (cancelHandler != null) {
+      cancelHandler.handle(this);
+    }
+  }
+
+  @Override
+  public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {
+    if ((reconnectIntervalMs > 0) && !cancelled) {
+      consume(Promise.promise());
+    }
+    if (shutdownSignalHandler != null) {
+      shutdownSignalHandler.handle(this);
+    }
+  }
+
+  @Override
+  public void handleRecoverOk(String consumerTag) {
+    if (recoverOkHandler != null) {
+      recoverOkHandler.handle(this);
+    }
+  }
+
+  @Override
+  public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+    CompletableFuture<Void> cf = new CompletableFuture<>();
+    
+    T value = messageCodec.decodeFromBytes(body);
+    RabbitMQMessage<T> msg = new RabbitMQMessageImpl<>(channel, channel.getChannelNumber(), value, consumerTag, envelope, properties);
+    
+    vertxContext.runOnContext(v -> {
+      handler.apply(this, msg)
+              .andThen(ar -> cf.complete(null));
+    });
+    
+    try {
+      cf.get();
+    } catch (Throwable ex) {      
+    }
+    
+  }    
+  
+  private Future<Void> consume(Promise<Void> promise) {
     String queueName = queueNameSupplier.get();
-    channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, bridge)
-            .onSuccess(consumerTag -> {
-              promise.complete(consumerTag);
-            })
-            .onFailure(ex -> {              
-              if (reconnectInterval > 0 && ! cancelled) {
-                log.debug("Failed to consume " + queueName + " (" + ex.getClass() + ", \"" + ex.getMessage() + "\"), will try again after " + reconnectInterval + "ms");
-                vertx.setTimer(reconnectInterval, (id) -> {
+    channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, this)
+            .onSuccess(tag -> promise.complete())
+            .onFailure(ex -> {
+              if (reconnectIntervalMs > 0 && ! cancelled) {
+                log.debug("Failed to consume " + queueName + " (" + ex.getClass() + ", \"" + ex.getMessage() + "\"), will try again after " + reconnectIntervalMs + "ms");
+                connection.getVertx().setTimer(reconnectIntervalMs, (id) -> {
                   consume(promise);
                 });
               } else {
@@ -169,128 +213,4 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer<T> {
             });
     return promise.future();
   }
-
-  @Override
-  public RabbitMQConsumer<T> exceptionHandler(Handler<Throwable> exceptionHandler) {
-    this.exceptionHandler = exceptionHandler;
-    return this;
-  }
-
-  @Override
-  public RabbitMQConsumer<T> handler(Handler<RabbitMQMessage<T>> handler) {
-    if (handler != null) {
-      pending.handler(msg -> {
-        try {
-          handler.handle(msg);
-        } catch (Exception e) {
-          handleException(e);
-        }
-      });
-    } else {
-      pending.handler(null);
-    }
-    return this;
-  }
-
-  @Override
-  public RabbitMQConsumer<T> pause() {
-    pending.pause();
-    return this;
-  }
-
-  @Override
-  public RabbitMQConsumer<T> resume() {
-    pending.resume();
-    return this;
-  }
-
-  @Override
-  public RabbitMQConsumer<T> fetch(long amount) {
-    pending.fetch(amount);
-    return this;
-  }
-
-  @Override
-  public RabbitMQConsumer<T> endHandler(Handler<Void> endHandler) {
-    this.endHandler = endHandler;
-    return this;
-  }
-
-  @Override
-  public String consumerTag() {
-    return consumerTag;
-  }
-
-  @Override
-  public Future<Void> cancel() {
-    Promise<Void> promise = Promise.promise();
-    cancel(promise);
-    return promise.future();
-  }
-
-  @Override
-  public void cancel(Handler<AsyncResult<Void>> cancelResult) {
-    log.debug("Cancelling " + consumerTag);
-    cancelled = true;
-    channel.onChannel(chann -> {
-      chann.basicCancel(consumerTag);
-      return null;
-    })
-            .compose(v -> channel.close())
-            .onComplete(ar -> {
-              if (cancelResult != null) {
-                cancelResult.handle(ar);
-              }
-              handleEnd();
-            });
-  }
-
-  @Override
-  public boolean isCancelled() {
-    return cancelled;
-  }
-
-  @Override
-  public boolean isPaused() {
-    return false;
-  }
-
-  /**
-   * Push message to stream.
-   * <p>
-   * Should be called from a vertx thread.
-   *
-   * @param message received message to deliver
-   */
-  private void handleMessage(RabbitMQMessage<T> message) {
-
-    if (pending.size() >= maxQueueSize) {
-      if (keepMostRecent) {
-        pending.read();
-      } else {
-        log.debug("Discard a received message since stream is paused and buffer flag is false");
-        return;
-      }
-    }
-    pending.write(message);
-  }
-
-  /**
-   * Trigger exception handler with given exception
-   */
-  private void handleException(Throwable exception) {
-    if (exceptionHandler != null) {
-      exceptionHandler.handle(exception);
-    }
-  }
-
-  /**
-   * Trigger end of stream handler
-   */
-  void handleEnd() {
-    if (endHandler != null) {
-      endHandler.handle(null);
-    }
-  }
-
 }

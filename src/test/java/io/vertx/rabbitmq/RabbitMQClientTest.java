@@ -69,7 +69,7 @@ public class RabbitMQClientTest {
     RabbitMQClient.connect(testRunContext.vertx(), config)
             .compose(conn -> {
               connection[0] = conn;
-              return connection[0].openChannel();
+              return connection[0].createChannelBuilder().openChannel();
             })
             .onComplete(ar -> {
               if (ar.succeeded()) {
@@ -125,21 +125,21 @@ public class RabbitMQClientTest {
     RabbitMQClient.connect(testRunContext.vertx(), config)
             .compose(conn -> {
               connection[0] = conn;
-              return connection[0].openChannel();
+              return connection[0].createChannelBuilder().openChannel();
             })
             .compose(chan -> {
               conChan[0] = chan;
-              return connection[0].openChannel();
+              return connection[0].createChannelBuilder().openChannel();
             })
             .compose(chan -> {
               pubChan[0] = chan;
-              return conChan[0].exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+              return conChan[0].getManagementChannel().exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
             })
-            .compose(v -> conChan[0].queueDeclare(queue, true, false, true, null))
-            .compose(v -> conChan[0].queueBind(queue, exchange, "", null))
+            .compose(v -> conChan[0].getManagementChannel().queueDeclare(queue, true, false, true, null))
+            .compose(v -> conChan[0].getManagementChannel().queueBind(queue, exchange, "", null))
             .compose(v -> conChan[0].basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new TestConsumer(conChan[0], context, donePromise)))
-            .compose(v -> pubChan[0].exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
-            .compose(v -> pubChan[0].confirmSelect())
+            .compose(v -> pubChan[0].getManagementChannel().exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null))
+            .compose(v -> pubChan[0].getManagementChannel().confirmSelect())
             .compose(v -> pubChan[0].basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new BasicProperties(), "Hello"))
             .compose(v -> pubChan[0].waitForConfirms(1000))
             .compose(v -> donePromise.future())
@@ -193,7 +193,7 @@ public class RabbitMQClientTest {
     RabbitMQClient.connect(testRunContext.vertx(), config)
             .compose(conn -> {
               connection[0] = (RabbitMQConnectionImpl) conn;
-              return connection[0].openChannel();
+              return connection[0].createChannelBuilder().openChannel();
             })
             .onComplete(ar -> {
               if (ar.succeeded()) {

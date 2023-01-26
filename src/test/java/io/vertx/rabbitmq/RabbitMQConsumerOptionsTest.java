@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 
 /**
  *
@@ -31,12 +33,18 @@ public class RabbitMQConsumerOptionsTest {
     
     RabbitMQConsumerOptions options = new RabbitMQConsumerOptions()
             .setAutoAck(true)
-            .setMaxInternalQueueSize(78)
+            .setExclusive(false)
+            .setReconnectInterval(1234)
+            .setArguments(ImmutableMap.<String, Object>builder().put("a", "b").build())
+            .setCancelHandler(con -> {})
             ;
     JsonObject json = options.toJson();
     logger.info("Json: {}", json);
-    assertEquals(true, json.getBoolean("autoAck").booleanValue());
-    assertEquals(78, json.getInteger("maxInternalQueueSize").intValue());
+    assertEquals(true, json.getBoolean("autoAck"));
+    assertEquals(false, json.getBoolean("exclusive"));
+    assertEquals(1234, json.getInteger("reconnectInterval").intValue());
+    assertEquals("b", json.getJsonObject("arguments").getString("a"));
+    assertFalse(json.containsKey("cancelHandler"));
     
   }
 }

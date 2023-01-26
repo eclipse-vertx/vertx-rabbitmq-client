@@ -11,6 +11,7 @@
 package io.vertx.rabbitmq;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
+import com.rabbitmq.client.AMQP.Queue.DeclareOk;
 import com.rabbitmq.client.BuiltinExchangeType;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -74,7 +75,7 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
   private final Promise<Long> messagesReceivedAfterReconnect = Promise.promise();
   
   private RabbitMQPublisher<Long> publisher;
-  private RabbitMQConsumer<Long> consumer;
+  private RabbitMQConsumer consumer;
   private final AtomicReference<String> queueName = new AtomicReference<>();
   
   public RabbitMQReconnectServerNamedAutoDeleteQueueTest() throws IOException {
@@ -104,7 +105,7 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     // Disable Java RabbitMQ client library reconnections
     options.setAutomaticRecoveryEnabled(false);
     // Enable vertx RabbitMQClient reconnections
-    options.setReconnectAttempts(Integer.MAX_VALUE);
+    options.setReconnectAttempts(100);
     return options;
   }
   
@@ -129,8 +130,8 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
     
-    createConsumer(connection)
-            .compose(v -> createProducer(connection))
+    createConsumer()
+            .compose(v -> createPublisher())
             .compose(v -> sendMessages())
             .compose(v -> firstMessagesReceived.future())
             .compose(v -> breakConnection())
@@ -152,16 +153,15 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
             ;
   }
 
-  private Future<Void> channelOpenedHandlerProducer(RabbitMQChannel channel) {
-    return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
-  }
-  
-  private Future<Void> createProducer(RabbitMQConnection connection) {
-    return connection.createPublisher(this::channelOpenedHandlerProducer, new RabbitMQLongMessageCodec(), TEST_EXCHANGE,  new RabbitMQPublisherOptions())
-            .compose(pub -> {
-                    this.publisher = pub;
-                    return Future.succeededFuture();
-            });
+  private Future<Void> createPublisher() {
+    return connection.createChannelBuilder()
+            .withChannelOpenHandler(chann -> {
+              chann.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
+            })
+            .createPublisher(TEST_EXCHANGE, new RabbitMQLongMessageCodec(), new RabbitMQPublisherOptions())
+            .onSuccess(pub -> publisher = pub)
+            .mapEmpty()
+            ;
   }
   
   private Future<Void> sendMessages() {
@@ -189,39 +189,34 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     return Future.succeededFuture();
   }
   
-  private Future<Void> channelOpenedHandlerConsumer(RabbitMQChannel channel) {
-    return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-            .compose(v -> channel.queueDeclare("", false, true, true, null))
-            .compose(brokerQueueName -> {
-              logger.debug("Queue declared as {}", brokerQueueName);
-              queueName.set(brokerQueueName);
-              return channel.queueBind(brokerQueueName, TEST_EXCHANGE, "", null);
-            });
+  
+  private Future<Void> messageHandler(RabbitMQConsumer consumer, RabbitMQMessage<Long> message) {
+    logger.debug("Got message {} from {}", message.body(), queueName);
+    if (messageSentAfterShutdown.future().succeeded()) {
+      logger.debug("Got message after reconnect");
+      messagesReceivedAfterReconnect.complete();
+    }
+    firstMessagesReceived.tryComplete();
+    return message.basicAck();
   }
-
-  private Future<Void> createConsumer(RabbitMQConnection connection) {
-    return connection.createConsumer(
-            this::channelOpenedHandlerConsumer
-            , new RabbitMQLongMessageCodec()
-            , null
-            , () -> queueName.get()
-            , new RabbitMQConsumerOptions()
-            , message -> {
-              logger.debug("Got message {} from {}", message.body(), queueName);
-              if (messageSentAfterShutdown.future().succeeded()) {
-                logger.debug("Got message after reconnect");
-                messagesReceivedAfterReconnect.complete();
-              }
-              firstMessagesReceived.tryComplete();
+  
+  private Future<Void> createConsumer() {
+    return connection.createChannelBuilder()
+            .withChannelOpenHandler(rawChannel -> {
+              rawChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
+              DeclareOk dok = rawChannel.queueDeclare("", false, true, true, null);
+              queueName.set(dok.getQueue());
+              rawChannel.queueBind(dok.getQueue(), TEST_EXCHANGE, "", null);
             })
-            .compose(con -> {
-              consumer = con;
-              consumer.getChannel().addChannelShutdownHandler(sse -> {
-                hasShutdown.set(true);
-              });
-              return Future.succeededFuture();
-            });
+            .withChannelShutdownHandler(sse -> {
+              hasShutdown.set(true);
+            })
+            .createConsumer(new RabbitMQLongMessageCodec(), null, () -> queueName.get(), new RabbitMQConsumerOptions(), this::messageHandler)            
+            .onSuccess(con -> consumer = con)
+            .mapEmpty()
+            ;
   }
+  
 
   private Future<Void> breakConnection() {
     return vertx.executeBlocking(promise -> {

@@ -45,17 +45,6 @@ public interface RabbitMQManagementChannel {
    */
   Future<Void> abort(int closeCode, String closeMessage);
   
-  /**
-   * Cancel a consumer. Calls the consumer's {@link Consumer#handleCancelOk}
-   * method.
-   * @param consumerTag a client- or server-generated consumer tag to establish context
-   * @see com.rabbitmq.client.AMQP.Basic.Cancel
-   * @see com.rabbitmq.client.AMQP.Basic.CancelOk
-   * @return a Future that will be completed when the consumer has closed.
-   * The Future will fail if an error is encountered, or if the consumerTag is unknown.
-   */
-  Future<Void> basicCancel(String consumerTag);
-  
   Future<Void> exchangeDeclare(String exchange, BuiltinExchangeType type, boolean durable, boolean autoDelete, Map<String,Object> arguments);
   
   Future<Void> exchangeDeclarePassive(String exchange);
@@ -69,8 +58,6 @@ public interface RabbitMQManagementChannel {
   Future<Void> queueBind(String queue, String exchange, String routingKey, Map<String,Object> arguments);
   
   Future<Void> confirmSelect();
-
-  Future<Void> waitForConfirms(long timeout);
 
   Future<Void> close();
   

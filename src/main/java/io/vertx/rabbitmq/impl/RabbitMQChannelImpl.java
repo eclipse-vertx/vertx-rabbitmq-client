@@ -28,7 +28,6 @@ import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.rabbitmq.ChannelFunction;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQChannelBuilder;
-import io.vertx.rabbitmq.RabbitMQConfirmation;
 import io.vertx.rabbitmq.RabbitMQManagementChannel;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
@@ -161,7 +160,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
       handler.handle(cause);
     }
   }
-    
+
   @Override
   public <T> Future<T> onChannel(ChannelFunction<T> handler) {
     if (closed) {
@@ -193,14 +192,23 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
     return onChannel(channel -> {
       return channel.addConfirmListener(ackCallback, nackCallback);
     }).mapEmpty();
-  }
-  
+  }  
   
   @Override
   public Future<Void> basicAck(long channelNumber, long deliveryTag, boolean multiple) {
     return onChannel(channel -> {
       if (channelNumber == this.channelNumber) {
         channel.basicAck(deliveryTag, multiple);
+      }
+      return null;
+    });    
+  }
+  
+  @Override
+  public Future<Void> basicNack(long channelNumber, long deliveryTag, boolean multiple, boolean requeue) {
+    return onChannel(channel -> {
+      if (channelNumber == this.channelNumber) {
+        channel.basicNack(deliveryTag, multiple, requeue);
       }
       return null;
     });    

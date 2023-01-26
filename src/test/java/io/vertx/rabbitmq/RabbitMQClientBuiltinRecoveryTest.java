@@ -16,8 +16,6 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import java.io.IOException;
@@ -72,8 +70,8 @@ public class RabbitMQClientBuiltinRecoveryTest {
   private final Promise<Long> allMessagesSent = Promise.promise();
   private final Promise<Long> allMessagesReceived = Promise.promise();
   
-  private RabbitMQPublisher<Object> publisher;
-  private RabbitMQConsumer<byte[]> consumer;
+  private RabbitMQPublisher<byte[]> publisher;
+  private RabbitMQConsumer consumer;
   
   public RabbitMQClientBuiltinRecoveryTest() throws IOException {
     logger.info("Constructing");
@@ -134,8 +132,8 @@ public class RabbitMQClientBuiltinRecoveryTest {
       }
     });
     
-    createConsumer(connection)
-            .compose(v -> createProducer(connection))
+    createConsumer()
+            .compose(v -> createPublisher())
             .compose(v -> sendMessages())
             .compose(v -> firstMessagesReceived.future())
             .compose(v -> breakConnection())
@@ -151,14 +149,15 @@ public class RabbitMQClientBuiltinRecoveryTest {
 
   }
 
-  private Future<Void> createProducer(RabbitMQConnection connection) {
-    return connection.createPublisher(chan -> {
-      return chan.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
-    }, null, TEST_EXCHANGE, new RabbitMQPublisherOptions().setResendOnReconnect(true))
-            .compose(pub -> {
-              publisher = pub;
-              return Future.succeededFuture();
-            });
+  private Future<Void> createPublisher() {
+    return connection.createChannelBuilder()
+            .withChannelOpenHandler(chann -> {
+              chann.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
+            })
+            .createPublisher(TEST_EXCHANGE, RabbitMQChannelBuilder.BYTE_ARRAY_MESSAGE_CODEC, new RabbitMQPublisherOptions().setResendOnReconnect(true))
+            .onSuccess(pub -> publisher = pub)
+            .mapEmpty()
+            ;
   }
   
   private Future<Void> sendMessages() {
@@ -174,7 +173,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
     timerId.set(vertx.setPeriodic(200, v -> {
       String value = "MSG " + counter.incrementAndGet();
       logger.info("Publishing message {}", value);
-      publisher.publish("", new BasicProperties(), Buffer.buffer(value))
+      publisher.publish("", new BasicProperties(), value.getBytes(StandardCharsets.UTF_8))
               .onFailure(ex -> {
                 logger.warn("Failed to send message {}: ", value, ex);
               });
@@ -189,14 +188,7 @@ public class RabbitMQClientBuiltinRecoveryTest {
     return Future.succeededFuture();
   }
 
-  private Future<Void> channelOpenedHandlerConsumer(RabbitMQChannel channel) {
-    return channel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null)
-            .compose(v -> channel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null))
-            .compose(v -> channel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null))
-            ;    
-  }
-  
-  private void messageHandler(RabbitMQMessage<byte[]> message) {
+  private Future<Void> messageHandler(RabbitMQConsumer consumer, RabbitMQMessage<byte[]> message) {
     String body = new String(message.body(), StandardCharsets.UTF_8);
     synchronized(receivedMessages) {
       receivedMessages.add(body);
@@ -209,19 +201,26 @@ public class RabbitMQClientBuiltinRecoveryTest {
         allMessagesReceived.tryComplete();
       }
     }
-    consumer.getChannel().basicAck(message.consumerTag(), message.envelope().getDeliveryTag(), false);
+    return message.basicAck();
   }
   
-  private Future<Void> createConsumer(RabbitMQConnection connection) {
-    
-    return connection.createConsumer(this::channelOpenedHandlerConsumer, TEST_QUEUE, new RabbitMQConsumerOptions().setReconnectInterval(0), this::messageHandler)
-            .compose(con -> {
-              consumer = con;
-              con.getChannel().addChannelShutdownHandler(sse -> {
-                hasShutdown.set(true);
-              });
-              return Future.succeededFuture();
-            });
+  private Future<Void> createConsumer() {
+    return connection.createChannelBuilder()
+            .withChannelOpenHandler(rawChannel -> {
+              rawChannel.exchangeDeclare(TEST_EXCHANGE, DEFAULT_RABBITMQ_EXCHANGE_TYPE, DEFAULT_RABBITMQ_EXCHANGE_DURABLE, DEFAULT_RABBITMQ_EXCHANGE_AUTO_DELETE, null);
+              rawChannel.queueDeclare(TEST_QUEUE, DEFAULT_RABBITMQ_QUEUE_DURABLE, DEFAULT_RABBITMQ_QUEUE_EXCLUSIVE, DEFAULT_RABBITMQ_QUEUE_AUTO_DELETE, null);
+              rawChannel.queueBind(TEST_QUEUE, TEST_EXCHANGE, "", null); 
+            })
+            .withChannelShutdownHandler(sse -> this.hasShutdown.set(true))
+            .createConsumer(
+                    RabbitMQChannelBuilder.BYTE_ARRAY_MESSAGE_CODEC
+                    , TEST_QUEUE
+                    , null
+                    , new RabbitMQConsumerOptions().setReconnectInterval(0)
+                    , this::messageHandler
+            )
+            .onSuccess(con -> consumer = con)
+            .mapEmpty();
   }
 
   private Future<Void> breakConnection() {

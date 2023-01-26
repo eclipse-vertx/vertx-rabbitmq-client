@@ -35,19 +35,14 @@ public class RabbitMQConsumerOptionsConverter {
             obj.setAutoAck((Boolean)member.getValue());
           }
           break;
+        case "consumerTag":
+          if (member.getValue() instanceof String) {
+            obj.setConsumerTag((String)member.getValue());
+          }
+          break;
         case "exclusive":
           if (member.getValue() instanceof Boolean) {
             obj.setExclusive((Boolean)member.getValue());
-          }
-          break;
-        case "keepMostRecent":
-          if (member.getValue() instanceof Boolean) {
-            obj.setKeepMostRecent((Boolean)member.getValue());
-          }
-          break;
-        case "maxInternalQueueSize":
-          if (member.getValue() instanceof Number) {
-            obj.setMaxInternalQueueSize(((Number)member.getValue()).intValue());
           }
           break;
         case "reconnectInterval":
@@ -70,9 +65,10 @@ public class RabbitMQConsumerOptionsConverter {
       json.put("arguments", map);
     }
     json.put("autoAck", obj.isAutoAck());
+    if (obj.getConsumerTag() != null) {
+      json.put("consumerTag", obj.getConsumerTag());
+    }
     json.put("exclusive", obj.isExclusive());
-    json.put("keepMostRecent", obj.isKeepMostRecent());
-    json.put("maxInternalQueueSize", obj.getMaxInternalQueueSize());
     json.put("reconnectInterval", obj.getReconnectInterval());
   }
 }

@@ -22,6 +22,11 @@ import io.netty.util.Recycler.Handle;
 import io.vertx.codegen.annotations.Nullable;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import io.vertx.rabbitmq.impl.RabbitMQChannelImpl;
 import io.vertx.rabbitmq.impl.RabbitMQCodecManager;
 import io.vertx.rabbitmq.impl.RabbitMQConfirmListenerImpl;
@@ -30,6 +35,7 @@ import io.vertx.rabbitmq.impl.RabbitMQConsumerImpl;
 import io.vertx.rabbitmq.impl.RabbitMQPublisherImpl;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
@@ -38,13 +44,20 @@ import java.util.function.Supplier;
  */
 public class RabbitMQChannelBuilder {
   
+  private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelBuilder.class);
+  
+  public static final RabbitMQMessageCodec<byte[]> BYTE_ARRAY_MESSAGE_CODEC = RabbitMQCodecManager.BYTE_ARRAY_MESSAGE_CODEC;
+  public static final RabbitMQMessageCodec<Buffer> BUFFER_MESSAGE_CODEC = RabbitMQCodecManager.BUFFER_MESSAGE_CODEC;
+  public static final RabbitMQMessageCodec<Object> NULL_MESSAGE_CODEC = RabbitMQCodecManager.NULL_MESSAGE_CODEC;
+  public static final RabbitMQMessageCodec<String> STRING_MESSAGE_CODEC = RabbitMQCodecManager.STRING_MESSAGE_CODEC;
+  public static final RabbitMQMessageCodec<JsonObject> JSON_OBJECT_MESSAGE_CODEC = RabbitMQCodecManager.JSON_OBJECT_MESSAGE_CODEC;
+  public static final RabbitMQMessageCodec<JsonArray> JSON_ARRAY_MESSAGE_CODEC = RabbitMQCodecManager.JSON_ARRAY_MESSAGE_CODEC;
+  
   private final RabbitMQConnectionImpl connection;
   private final List<ChannelHandler> channelOpenHandlers = new ArrayList<>();
   private final RabbitMQCodecManager codecManager = new RabbitMQCodecManager();
   private final List<Handler<Channel>> channelRecoveryCallbacks = new ArrayList<>();
   private final List<Handler<ShutdownSignalException>> shutdownHandlers = new ArrayList<>();
-  private int prefetchSize;
-  private int prefetchCount;
   
 
   /**
@@ -249,9 +262,9 @@ public class RabbitMQChannelBuilder {
    * @return a RabbitMQConsumer on this channel that can reliably receives messages.
    * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
    */
-  public Future<RabbitMQConsumer<byte[]>> createConsumer(String queue, RabbitMQConsumerOptions options) {
-    return RabbitMQConsumerImpl.create(this, RabbitMQCodecManager.BYTE_ARRAY_MESSAGE_CODEC, null, options);
-  }
+//  public Future<RabbitMQConsumer> createConsumer(String queue, RabbitMQConsumerOptions options) {
+//    return RabbitMQStreamConsumer1Impl.create(this, RabbitMQCodecManager.BYTE_ARRAY_MESSAGE_CODEC, null, options);
+//  }
   
   /**
    * Create a RabbitMQConsumer (using a new channel on this connection) that reliably receives messages.
@@ -263,15 +276,38 @@ public class RabbitMQChannelBuilder {
    * @return a RabbitMQConsumer on this channel that can reliably receives messages.
    * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
    */
-  public <T> Future<RabbitMQConsumer<T>> createConsumer(
+//  public <T> Future<RabbitMQStreamConsumer1<T>> createConsumer(
+//            RabbitMQMessageCodec<T> codec
+//          , String queue
+//          , Supplier<String> queueNameSuppler
+//          , RabbitMQConsumerOptions options
+//  ) {
+//    return RabbitMQStreamConsumer1Impl.create(this, codec, queueNameSuppler, options);
+//  }
+
+  /**
+   * Create a RabbitMQConsumer (using a new channel on this connection) that reliably receives messages.
+   * @param <T> The type of data that will be received by the Consumer.
+   * @param codec The codec that will be used to decode the messages received by the Consumer.
+   * @param queue The queue that messages are being pushed from.
+   * @param queueNameSuppler Functional supplier of the queue name, if this is non-null the queue parameter will be ignored.
+   * @param options Options for configuring the consumer.
+   * @param handler The handler that will be called for each message received.
+   * @return a RabbitMQConsumer on this channel that can reliably receives messages.
+   * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
+   */
+  public <T> Future<RabbitMQConsumer> createConsumer(
             RabbitMQMessageCodec<T> codec
           , String queue
           , Supplier<String> queueNameSuppler
           , RabbitMQConsumerOptions options
+          , BiFunction<RabbitMQConsumer, RabbitMQMessage<T>, Future<Void>> handler
   ) {
-    return RabbitMQConsumerImpl.create(this, codec, queueNameSuppler, options);
+    if (queueNameSuppler == null) {
+      queueNameSuppler = () -> queue;
+    }
+    return RabbitMQConsumerImpl.create(this, codec, queueNameSuppler, options, handler);
   }
-
   
   public RabbitMQConnectionImpl getConnection() {
     return connection;
@@ -292,7 +328,11 @@ public class RabbitMQChannelBuilder {
   public ChannelFunction<Void> getChannelOpenHandler() {
     return chan -> {
       for (ChannelHandler handler : channelOpenHandlers) {
-        handler.handle(chan);
+        try {
+          handler.handle(chan);
+        } catch (Throwable ex) {
+          log.error("ChannelOpenHAndler failed: ", ex);
+        }
       }
       return null;
     };

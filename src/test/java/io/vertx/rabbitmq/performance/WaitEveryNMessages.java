@@ -44,13 +44,14 @@ public class WaitEveryNMessages implements RabbitMQPublisherStresser {
 
   @Override
   public Future<Void> init(String exchange) {
-    return connection.openChannel()
+    return connection.createChannelBuilder()
+            .openChannel()
             .compose(chann -> {
               this.channel = chann;
-              return channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+              return channel.getManagementChannel().exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
             })
             .compose(v -> {
-              return channel.confirmSelect();
+              return channel.getManagementChannel().confirmSelect();
             })
             ;
   }  

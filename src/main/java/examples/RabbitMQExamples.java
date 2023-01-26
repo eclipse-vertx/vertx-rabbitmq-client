@@ -15,7 +15,7 @@ import com.rabbitmq.client.AMQP.Queue.DeclareOk;
 import com.rabbitmq.client.Address;
 import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.Envelope;
-import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.net.JksOptions;
 import io.vertx.rabbitmq.DefaultConsumer;
@@ -25,6 +25,7 @@ import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
+import io.vertx.rabbitmq.impl.RabbitMQCodecManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
@@ -57,6 +58,7 @@ public class RabbitMQExamples {
   private static final boolean QUEUE_DURABLE = true;
   private static final boolean QUEUE_EXCLUSIVE = false;
   private static final boolean QUEUE_AUTO_DELETE = false;
+  private static final boolean PUBLISH_MANDATORY = false;
     
   public void createConnectionWithUri() {
     Vertx vertx = Vertx.vertx();
@@ -70,7 +72,7 @@ public class RabbitMQExamples {
               return builder.openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", false, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -90,7 +92,7 @@ public class RabbitMQExamples {
               return connection.createChannelBuilder().openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", false, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -114,7 +116,7 @@ public class RabbitMQExamples {
               return connection.createChannelBuilder().openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", false, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -135,7 +137,7 @@ public class RabbitMQExamples {
               return builder.openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", false, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -155,11 +157,11 @@ public class RabbitMQExamples {
               return builder.openChannel();
             })
             .compose(channel -> {
-              return channel.getManagementChannel().exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null)
+              return channel.getManagementChannel().exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null)
                       .map(channel);
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", false, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -176,12 +178,12 @@ public class RabbitMQExamples {
             .compose(connection -> {
               return connection.createChannelBuilder()
                       .withChannelOpenHandler(chann -> {
-                        chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                        chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       })
                       .openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", false, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -201,11 +203,11 @@ public class RabbitMQExamples {
             })
             .compose(channel -> {
               return channel.onChannel(chann -> {
-                return chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                return chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
               }).map(channel);
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", false, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -227,7 +229,7 @@ public class RabbitMQExamples {
             .compose(connection -> {
               return connection.createChannelBuilder()
                       .withChannelOpenHandler(chann -> {
-                        chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                        chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       })
                       .openChannel();
             })
@@ -256,7 +258,7 @@ public class RabbitMQExamples {
             .compose(connection -> {
               return connection.createChannelBuilder()
                       .withChannelOpenHandler(chann -> {
-                        chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                        chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       })
                       .openChannel();
             })
@@ -300,7 +302,7 @@ public class RabbitMQExamples {
             .compose(connection -> {
               return connection.createChannelBuilder()
                       .withChannelOpenHandler(chann -> {
-                        chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                        chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       })
                       .openChannel();
             })
@@ -325,7 +327,7 @@ public class RabbitMQExamples {
             .compose(connection -> {
               return connection.createChannelBuilder()
                       .withChannelOpenHandler(chann -> {
-                        chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                        chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       })
                       .openChannel();
             })
@@ -356,7 +358,7 @@ public class RabbitMQExamples {
             .compose(connection -> {
               return connection.createChannelBuilder()
                       .withChannelOpenHandler(chann -> {
-                        chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                        chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       })
                       .openChannel();
             })
@@ -374,7 +376,7 @@ public class RabbitMQExamples {
     RabbitMQClient.connect(vertx, config).compose(connection -> {      
             return connection.createChannelBuilder()                      
                     .withChannelOpenHandler(chann -> {
-                      chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                      chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                     })
                     .openChannel();
             })
@@ -391,7 +393,7 @@ public class RabbitMQExamples {
             return connection.createChannelBuilder()
                     .withNamedCodec(new CustomStringCodec())
                     .withChannelOpenHandler(chann -> {
-                      chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                      chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                     })
                     .openChannel();
             })
@@ -407,7 +409,7 @@ public class RabbitMQExamples {
               return connection.createChannelBuilder()
                     .withTypedCodec(CustomClass.class, new CustomClassCodec())
                     .withChannelOpenHandler(chann -> {
-                      chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                      chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                     })
                     .openChannel();
             })
@@ -423,14 +425,15 @@ public class RabbitMQExamples {
             .compose(connection -> {      
               return connection.createChannelBuilder()
                     .withChannelOpenHandler(chann -> {
-                      chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
+                      chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       // No queue name passed in, to use an auto created queue
-                      DeclareOk dok = chann.queueDeclare("", true, true, true, null);
+                      DeclareOk dok = chann.queueDeclare("", QUEUE_DURABLE, QUEUE_EXCLUSIVE, QUEUE_AUTO_DELETE, null);
                       queueName[0] = dok.getQueue();
                       chann.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null);
                     })
-                    .createConsumer(null, null, () -> queueName[0], new RabbitMQConsumerOptions(), msg -> {
-                      logger.log(Level.INFO, "Got message {0} from {1}", new Object[]{msg.body(), queueName[0]});                    
+                    .createConsumer(null, null, () -> queueName[0], new RabbitMQConsumerOptions(), (con, msg) -> {
+                      logger.log(Level.INFO, "Got message {0} from {1}", new Object[]{msg.body(), queueName[0]});          
+                      return Future.succeededFuture();
                     })
                     ;
             })
@@ -456,8 +459,8 @@ public class RabbitMQExamples {
             .compose(connection -> {      
               return connection.createChannelBuilder()
                     .withChannelOpenHandler(chann -> {
-                      chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
-                      chann.queueDeclare(QUEUE_NAME, true, true, true, null);
+                      chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
+                      chann.queueDeclare(QUEUE_NAME, QUEUE_DURABLE, QUEUE_EXCLUSIVE, QUEUE_AUTO_DELETE, null);
                       chann.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null);
                     })
                     .openChannel();
@@ -481,29 +484,30 @@ public class RabbitMQExamples {
             .compose(connection -> {      
               return connection.createChannelBuilder()
                     .withChannelOpenHandler(chann -> {
-                      chann.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.FANOUT, true, true, null);
-                      chann.queueDeclare(QUEUE_NAME, true, true, true, null);
+                      chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
+                      chann.queueDeclare(QUEUE_NAME, QUEUE_DURABLE, QUEUE_EXCLUSIVE, QUEUE_AUTO_DELETE, null);
                       chann.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null);
                     })
-                    .createConsumer(QUEUE_NAME, new RabbitMQConsumerOptions().setAutoAck(false));
-            })
-            .onSuccess(consumer -> {
-              consumer.handler(msg -> {
-                // In most cases consumers will have some asynchronouse code
-                consumer.pause();
-                vertx.<Void>executeBlocking(promise -> {
-                  System.out.println(new String(msg.body(), StandardCharsets.UTF_8));
-                  msg.basicAck()
-                          .andThen(promise)
-                          .onComplete(ar -> {
-                            consumer.resume();
-                          });
-                });
-                consumer.resume();                        
-              });
+                    .createConsumer(
+                            RabbitMQCodecManager.BYTE_ARRAY_MESSAGE_CODEC
+                            , QUEUE_NAME
+                            , null
+                            , new RabbitMQConsumerOptions()
+                                    .setAutoAck(false)
+                            , (consumer, message) -> {
+                              // In most cases consumers will have some asynchronouse code
+                              return vertx.<Void>executeBlocking(promise -> {
+                                System.out.println(new String(message.body(), StandardCharsets.UTF_8));
+                                message.basicAck()
+                                        .andThen(promise)
+                                        ;
+                              });
+                            }
+                    );
             })
             .onSuccess(v -> logger.info("Consumer created"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
             ;
   }
+  
 }

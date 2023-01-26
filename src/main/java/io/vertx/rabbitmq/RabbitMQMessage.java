@@ -16,7 +16,6 @@ import io.vertx.codegen.annotations.CacheReturn;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.Future;
-import io.vertx.core.Handler;
 
 /**
  * Represent a message received message received in a rabbitmq-queue.
@@ -50,16 +49,11 @@ public interface RabbitMQMessage<T> {
   @CacheReturn
   BasicProperties properties();
 
-  /**
-   * @return the message count for messages obtained with {@link RabbitMQClient#basicGet(String, boolean, Handler)}
-   */
-  @CacheReturn
-  Integer messageCount();
-  
+  @GenIgnore(GenIgnore.PERMITTED_TYPE)
   RabbitMQChannel getChannel();
   
   Future<Void> basicAck();
   
-  Future<Void> basicNack();
+  Future<Void> basicNack(boolean requeue);
   
 }

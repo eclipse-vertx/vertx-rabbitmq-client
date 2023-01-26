@@ -12,13 +12,15 @@ package io.vertx.rabbitmq.performance;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.BuiltinExchangeType;
+import com.rabbitmq.client.Channel;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
-import io.vertx.rabbitmq.RabbitMQChannel;
+import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQPublisher;
 import io.vertx.rabbitmq.RabbitMQPublisherOptions;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -49,17 +51,18 @@ public class Publisher implements RabbitMQPublisherStresser {
     return "Future publisher 2 " + (withRetries ? "with" : "without") + " retries";
   }
   
-  private Future<Void> channelOpenedHandler(RabbitMQChannel channel) {
-    return channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+  private void channelOpenHandler(Channel rawChannel) throws IOException {
+    rawChannel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
   }
 
   @Override
   public Future<Void> init(String exchange) {
-    return connection.createPublisher(this::channelOpenedHandler, null, exchange, new RabbitMQPublisherOptions().setResendOnReconnect(withRetries))
-            .compose(pub -> {
-              this.publisher = pub;
-              return Future.succeededFuture();
-            });
+    return connection.createChannelBuilder()
+            .withChannelOpenHandler(this::channelOpenHandler)
+            .createPublisher(exchange, RabbitMQChannelBuilder.BYTE_ARRAY_MESSAGE_CODEC, new RabbitMQPublisherOptions().setResendOnReconnect(withRetries))
+            .onSuccess(pub -> this.publisher = pub)
+            .mapEmpty()
+            ;
   }
   
   @Override

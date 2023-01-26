@@ -13,32 +13,42 @@ package io.vertx.rabbitmq.impl;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.BasicProperties;
 import com.rabbitmq.client.Envelope;
+import io.vertx.core.Future;
+import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQMessage;
 
 public class RabbitMQMessageImpl<T> implements RabbitMQMessage<T> {
 
-  private T body;
-  private String consumerTag;
-  private Envelope envelope;
-  private BasicProperties properties;
-  private Integer messageCount;
+  private final RabbitMQChannel channel;
+  private final int channelNumber;
+  private final T body;
+  private final String consumerTag;
+  private final Envelope envelope;
+  private final BasicProperties properties;
 
   /**
    * Construct a new message
    *
+   * @param channel     the RabbitMQChannel that received this message
    * @param consumerTag the <i>consumer tag</i> associated with the consumer
    * @param envelope    packaging data for the message
    * @param properties  content header data for the message
    * @param body        the message body (opaque, client-specific byte array)
    */
-  RabbitMQMessageImpl(T body, String consumerTag, com.rabbitmq.client.Envelope envelope, AMQP.BasicProperties properties, Integer messageCount) {
+  public RabbitMQMessageImpl(RabbitMQChannel channel, int channelNumber, T body, String consumerTag, com.rabbitmq.client.Envelope envelope, AMQP.BasicProperties properties) {
+    this.channel = channel;
+    this.channelNumber = channelNumber;
     this.body = body;
     this.consumerTag = consumerTag;
     this.envelope = envelope;
     this.properties = properties;
-    this.messageCount = messageCount;
   }
 
+  @Override
+  public RabbitMQChannel getChannel() {
+    return channel;
+  }
+  
   @Override
   public T body() {
     return body;
@@ -60,7 +70,14 @@ public class RabbitMQMessageImpl<T> implements RabbitMQMessage<T> {
   }
 
   @Override
-  public Integer messageCount() {
-    return messageCount;
+  public Future<Void> basicAck() {
+    return channel.basicAck(channelNumber, envelope.getDeliveryTag(), false);
   }
+
+  @Override
+  public Future<Void> basicNack(boolean requeue) {
+    return channel.basicNack(channelNumber, envelope.getDeliveryTag(), false, requeue);
+  }
+  
+  
 }

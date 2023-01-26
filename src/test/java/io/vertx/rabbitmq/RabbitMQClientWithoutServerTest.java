@@ -34,7 +34,7 @@ public class RabbitMQClientWithoutServerTest {
     config.setUri("amqp://nonexistant.localhost:0/");
     
     RabbitMQClient.connect(testRunContext.vertx(), config)
-            .compose(connection -> connection.openChannel())
+            .compose(connection -> connection.createChannelBuilder().openChannel())
             .onComplete(ar -> {
               if (ar.succeeded()) {
                 context.fail("Expected failure as the URI is invalid");

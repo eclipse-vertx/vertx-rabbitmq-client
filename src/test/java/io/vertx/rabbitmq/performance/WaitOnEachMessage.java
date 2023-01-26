@@ -42,12 +42,12 @@ public class WaitOnEachMessage implements RabbitMQPublisherStresser {
   @Override
   public Future<Void> init(String exchange) {
     this.exchange = exchange;
-    return connection.openChannel()
+    return connection.createChannelBuilder().openChannel()
             .compose(chann -> {
               this.channel = chann;
-              return channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+              return channel.getManagementChannel().exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
             })
-            .compose(v -> channel.confirmSelect())
+            .compose(v -> channel.getManagementChannel().confirmSelect())
             ;
   }
 

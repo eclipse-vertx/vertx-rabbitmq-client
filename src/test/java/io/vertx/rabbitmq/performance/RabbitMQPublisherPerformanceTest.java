@@ -155,17 +155,24 @@ public class RabbitMQPublisherPerformanceTest {
     RabbitMQOptions config = config();
     
     RabbitMQConnection connection[] = new RabbitMQConnection[1];
+
+    String exchange = this.getClass().getName() + "Exchange";
+    String queue = this.getClass().getName() + "Queue";
     
     RabbitMQClient.connect(testRunContext.vertx(), config)
             .compose(conn -> {
               connection[0] = conn;
-              return connection[0].openChannel();
+              return connection[0].createChannelBuilder()
+                      .withChannelOpenHandler(rawChannel -> {
+                        rawChannel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+                        rawChannel.queueDeclare(queue, true, false, true, null);
+                        rawChannel.queueBind(queue, exchange, "", null);
+                      })
+                      .openChannel();
             })
             .onSuccess(channel -> {
               Async async = testContext.async();
 
-              String exchange = this.getClass().getName() + "Exchange";
-              String queue = this.getClass().getName() + "Queue";
 
               List<RabbitMQPublisherStresser> tests = Arrays.asList(
                       new FireAndForget(connection[0])
@@ -177,10 +184,7 @@ public class RabbitMQPublisherPerformanceTest {
                       , new Publisher(testRunContext.vertx(), connection[0], false)
               );
 
-              channel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null)
-                      .compose(v -> channel.queueDeclare(queue, true, false, true, null))
-                      .compose(v -> channel.queueBind(queue, exchange, "", null))
-                      .compose(v -> channel.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new NullConsumer()))
+              channel.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new NullConsumer())
                       .compose(v -> init(config.getUri(), exchange, tests.iterator()))
                       .compose(v -> runTests(tests.iterator()))
                       .compose(v -> connection[0].close())
