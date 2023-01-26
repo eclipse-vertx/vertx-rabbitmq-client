@@ -11,6 +11,7 @@
 package io.vertx.rabbitmq.performance;
 
 import io.vertx.core.Future;
+import io.vertx.rabbitmq.RabbitMQConnection;
 
 /**
  *
@@ -18,7 +19,7 @@ import io.vertx.core.Future;
  */
 public interface RabbitMQPublisherStresser {
   String getName();
-  Future<Void> init(String exchange);
+  Future<Void> init(RabbitMQConnection connection, String exchange);
   Future<Void> runTest(long iterations);
   Future<Void> shutdown();
 }

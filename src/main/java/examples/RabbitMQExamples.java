@@ -428,8 +428,9 @@ public class RabbitMQExamples {
                       chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       // No queue name passed in, to use an auto created queue
                       DeclareOk dok = chann.queueDeclare("", QUEUE_DURABLE, QUEUE_EXCLUSIVE, QUEUE_AUTO_DELETE, null);
+                      // Captire the queue name to use for the bind and the the consume
                       queueName[0] = dok.getQueue();
-                      chann.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null);
+                      chann.queueBind(queueName[0], EXCHANGE_NAME, "", null);
                     })
                     .createConsumer(null, null, () -> queueName[0], new RabbitMQConsumerOptions(), (con, msg) -> {
                       logger.log(Level.INFO, "Got message {0} from {1}", new Object[]{msg.body(), queueName[0]});          
@@ -445,13 +446,27 @@ public class RabbitMQExamples {
   /**
    * @see RabbitMQPublishCustomCodecTest )
    */
-  public void createConsumerWithCodec(RabbitMQChannel channel) {
-//    channel.registerCodec(new CustomClassCodec());    
-//    RabbitMQConsumer<CustomClass> consumer = channel.createConsumer(new CustomClassCodec(), "queue", new RabbitMQConsumerOptions());
-//    consumer.handler(message -> {
-//      CustomClass cc = message.body();
-//    });
-//    consumer.consume(true, null);
+  public void createConsumerWithCodec(Vertx vertx, RabbitMQOptions options) {
+    RabbitMQClient.connect(vertx, options)
+            .compose(connection -> {      
+              return connection.createChannelBuilder()
+                      .withChannelOpenHandler(rawChannel -> {
+                        rawChannel.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
+                        rawChannel.queueDeclare(QUEUE_NAME, QUEUE_DURABLE, QUEUE_EXCLUSIVE, QUEUE_AUTO_DELETE, null);
+                        rawChannel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null);
+                      })
+                      .createConsumer(RabbitMQChannelBuilder.STRING_MESSAGE_CODEC
+                              , QUEUE_NAME
+                              , null
+                              , new RabbitMQConsumerOptions()
+                              , (consumer, message) -> {
+                                logger.log(Level.FINE, "Got this string message: {0}", message.body());
+                                return message.basicAck();
+                              });
+            })
+            .onSuccess(v -> logger.info("Consumer created"))
+            .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
+            ;
   }
   
   public void basicConsumeRaw(Vertx vertx, RabbitMQOptions options) {
@@ -496,6 +511,7 @@ public class RabbitMQExamples {
                                     .setAutoAck(false)
                             , (consumer, message) -> {
                               // In most cases consumers will have some asynchronouse code
+                              // The RabbitMQ thread is blocked until the Future returned here is completed.
                               return vertx.<Void>executeBlocking(promise -> {
                                 System.out.println(new String(message.body(), StandardCharsets.UTF_8));
                                 message.basicAck()

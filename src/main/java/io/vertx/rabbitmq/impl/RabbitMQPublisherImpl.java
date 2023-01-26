@@ -158,7 +158,9 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
     return channelBuilder.withChannelRecoveryCallback(this::channelRecoveryCallback)
             .withConfirmHandler(confirmation -> handleConfirmation(confirmation))
             .withChannelOpenHandler(chann -> {
-              performResends(channel);
+              if (channel != null) {
+                performResends(channel);
+              }
             })
             .openChannel()
             .onSuccess(chann -> this.channel = chann)

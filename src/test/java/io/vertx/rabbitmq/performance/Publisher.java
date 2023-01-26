@@ -35,14 +35,13 @@ public class Publisher implements RabbitMQPublisherStresser {
 
   private static final Logger log = LoggerFactory.getLogger(Publisher.class);
   
-  private final RabbitMQConnection connection;
+  private RabbitMQConnection connection;
   private RabbitMQPublisher publisher;
   private final boolean withRetries;
   
   private String exchange;
 
-  public Publisher(Vertx vertx, RabbitMQConnection connection, boolean withRetries) {
-    this.connection = connection;
+  public Publisher(boolean withRetries) {
     this.withRetries = withRetries;
   }
   
@@ -56,7 +55,9 @@ public class Publisher implements RabbitMQPublisherStresser {
   }
 
   @Override
-  public Future<Void> init(String exchange) {
+  public Future<Void> init(RabbitMQConnection connection, String exchange) {
+    this.connection = connection;
+    this.exchange = exchange;
     return connection.createChannelBuilder()
             .withChannelOpenHandler(this::channelOpenHandler)
             .createPublisher(exchange, RabbitMQChannelBuilder.BYTE_ARRAY_MESSAGE_CODEC, new RabbitMQPublisherOptions().setResendOnReconnect(withRetries))

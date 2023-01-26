@@ -273,25 +273,6 @@ public class RabbitMQChannelBuilder {
    * @param queue The queue that messages are being pushed from.
    * @param queueNameSuppler Functional supplier of the queue name, if this is non-null the queue parameter will be ignored.
    * @param options Options for configuring the consumer.
-   * @return a RabbitMQConsumer on this channel that can reliably receives messages.
-   * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.
-   */
-//  public <T> Future<RabbitMQStreamConsumer1<T>> createConsumer(
-//            RabbitMQMessageCodec<T> codec
-//          , String queue
-//          , Supplier<String> queueNameSuppler
-//          , RabbitMQConsumerOptions options
-//  ) {
-//    return RabbitMQStreamConsumer1Impl.create(this, codec, queueNameSuppler, options);
-//  }
-
-  /**
-   * Create a RabbitMQConsumer (using a new channel on this connection) that reliably receives messages.
-   * @param <T> The type of data that will be received by the Consumer.
-   * @param codec The codec that will be used to decode the messages received by the Consumer.
-   * @param queue The queue that messages are being pushed from.
-   * @param queueNameSuppler Functional supplier of the queue name, if this is non-null the queue parameter will be ignored.
-   * @param options Options for configuring the consumer.
    * @param handler The handler that will be called for each message received.
    * @return a RabbitMQConsumer on this channel that can reliably receives messages.
    * After being constructed and configured the RabbitMQConsumer should be passed to the basicConsume method.

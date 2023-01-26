@@ -25,14 +25,13 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class WaitEveryNMessages implements RabbitMQPublisherStresser {
 
-  private final RabbitMQConnection connection;
+  private RabbitMQConnection connection;
   private RabbitMQChannel channel;
   private final AtomicLong counter = new AtomicLong();
   private String exchange;
   private long n;
 
-  public WaitEveryNMessages(RabbitMQConnection connection, long n) {
-    this.connection = connection;
+  public WaitEveryNMessages(long n) {
     this.n = n;
   }
 
@@ -43,7 +42,9 @@ public class WaitEveryNMessages implements RabbitMQPublisherStresser {
   }
 
   @Override
-  public Future<Void> init(String exchange) {
+  public Future<Void> init(RabbitMQConnection connection, String exchange) {
+    this.connection = connection;
+    this.exchange = exchange;
     return connection.createChannelBuilder()
             .openChannel()
             .compose(chann -> {

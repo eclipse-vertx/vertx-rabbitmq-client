@@ -312,7 +312,7 @@ From the consumer's point of view there are three basic options:
 
 It is vital that a consumer sends an ack (or nack) for all messages received (or shuts itself down).
 Messages not acked will back up and block on the broker until the consumer shuts down.
-A consumer can be configured to auto-ack messages, but can lead to message loss.
+A consumer can be configured to auto-ack messages, but that can lead to message loss.
 
 With this library your next choice is whether you need to use a Vertx-based consumer or not.
 If the handling of a message can take place in a single method on a single thread a raw consumer will be more efficient than a Vertx-based one,
@@ -328,10 +328,9 @@ ack or nack should be sent from the handler method directly.
 {@link examples.RabbitMQExamples#basicConsumeRaw}
 ----
 
-The Vertx-based consumer receives messages from RabbitMQ and adds them to a Vertx ReadStream from which they can be read.
-This means that the messages will not be acked in the consumer directly and all messages available in the queue 
-(up to the prefetch limit set on the channel or the maxInternalQueueSize set on the consumer)
-will be placed into the ReadStream.
+The Vertx-based consumer receives messages from RabbitMQ and passes them on to a handler running on a Vertx context.
+The RabbitMQ thread that the internal handler runs on will block until the Future returned by the Vertx consumer
+is completed.
 
 [source,$lang]
 ----
@@ -366,7 +365,9 @@ This ordering means that it is always possible to override the default codec, bu
 The instance of RabbitMQCodecManager is internal to the RabbitMQChannel.
 If a custom codec is used it is necessary to register it on all RabbitMQChannel instances that require it.
 
-
+The standard codecs are all stateless and available as static members of the RabbitMQChannelBuilder.
+The RabbitMQChannelBuilder.BYTE_ARRAY_MESSAGE_CODEC is effectively a no-op and is the codec to choose by default if no conversion is
+required.
 
 Publish a message using a named custom codec.
 
@@ -375,7 +376,7 @@ Publish a message using a named custom codec.
 {@link examples.RabbitMQExamples#basicPublishNamedCodec}
 ----
 
-Publish a message using a types custom codec.
+Publish a message using a typed custom codec.
 
 [source,$lang]
 ----
@@ -384,15 +385,16 @@ Publish a message using a types custom codec.
 
 === Consuming Typed Messages
 
-RabbitMQConsumer is a generic interface parameterized with the type of object that the callback will be passed.
-There are two versions of createConsumer:
+When creating a consumer a single codec must be chosen to be used for all messages received.
+
+It would be possible for a consumer to use fields from the envelope (content-type and content-encoding) to choose
+a codec from the codec manager, but this would not help with type safety as only one handler can be defined for a consumer 
+and that would not be able to specialize for Object.
+
 [source,$lang]
 ----
-  RabbitMQConsumer<byte[]> createConsumer(String queue, RabbitMQConsumerOptions options);
-  <T> RabbitMQConsumer<T> createConsumer(RabbitMQMessageCodec<T> codec, String queue, RabbitMQConsumerOptions options);
+{@link examples.RabbitMQExamples#createConsumerWithCodec}
 ----
-
-The default version produces a consumer parameterised with byte[], but an alternative consumer can be created by specifying the codec to be used.
 
 
 == Reliable Publishing
@@ -426,23 +428,23 @@ When confirmations are received from RabbitMQ the Promises are completed.
 If the connection to the server breaks before acknowledgements are received the Publisher can be configured to either 
 resend the unacknowledged messages or to fail the Promises for those messages.
 Enabling resending has a slight overhead as all transmitted messages must be retained until they have been confirmed
-, but it is necessary for reliable publishing without further input from the caller.
+but it is necessary for reliable publishing without further input from the caller.
 
 The table below can be used to get an idea of the throughput that can be achieved with different approaches.
-These values were obtained from running the RabbitMQPublisherPerformanceTest test on an AMD 5950X with 64GB of RAM
+These values were obtained from running the RabbitMQPublisherPerformanceTest test on a laptop with an Intel i9-12900HK and 64GB of RAM
 , different setups and network configurations will produce different results, though I expect the general trends to be the same.
 
 .Performance metrics for different publishing approaches
 [cols="<,>,>", options="header,footer"]
 |===
 | Approach | Time for 50000 messages (seconds) | Rate (messages/second)
-| Fire and forget (no message confirmation) | 1.159s | 43140 M/s
-| Wait on each message | 35.579s | 1405 M/s
-| Wait after 10 messages | 8.391s | 5958 M/s
-| Wait after 100 messages | 5.637s | 8869 M/s
-| Wait after 1000 messages | 5.144s | 9720 M/s
-| Future publisher 2 with resend | 1.022s | 48923 M/s
-| Future publisher 2 without resend | 0.873s | 57273 M/s
+| Fire and forget (no message confirmation) | 0.149s | 335570 M/s
+| Wait on each message | 40.511s | 1234 M/s
+| Wait after 10 messages | 7.436s | 6724 M/s
+| Wait after 100 messages | 3.985s | 12547 M/s
+| Wait after 1000 messages | 2.362s | 21168 M/s
+| Future publisher 2 with retries | 1.783s | 28042 M/s
+| Future publisher 2 without retries | 2.217s | 22552 M/s
 |===
 
 
