@@ -19,7 +19,7 @@ import io.vertx.core.Future;
 
 /**
  *
- * @author njt
+ * @author jtalbut
  */
 public interface RabbitMQConsumer {
   

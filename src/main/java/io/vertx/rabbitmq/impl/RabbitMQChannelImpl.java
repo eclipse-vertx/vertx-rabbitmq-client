@@ -163,7 +163,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
 
   @Override
   public <T> Future<T> onChannel(ChannelFunction<T> handler) {
-    if (closed) {
+    if (closed || connection.isClosed()) {
       return Future.failedFuture("Channel closed");
     }
     return createLock.create(promise -> {

@@ -18,12 +18,23 @@ package io.vertx.rabbitmq;
 import com.rabbitmq.client.Channel;
 
 /**
- * Simple Handler class that accepts a Channel and returns a value.
+ * Simple Handler class that accepts a synchronous Channel and returns a value.
+ * 
+ * 
  * 
  * The handler may also throw an Exception.
  * 
- * @author njt
+ * @author jtalbut
  */
 public interface ChannelFunction<T> {
+  
+    /**
+     * 
+     * 
+     * 
+     * @param channel
+     * @return
+     * @throws Exception 
+     */
     T handle(Channel channel) throws Exception;
 }

@@ -494,4 +494,9 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     return close(AMQP.REPLY_SUCCESS, "OK", config.getHandshakeTimeout());
   }
 
+  @Override
+  public boolean isClosed() {
+    return closed;
+  }
+
 }

@@ -22,7 +22,7 @@ import com.rabbitmq.client.Channel;
  * 
  * The handler may also throw an Exception.
  * 
- * @author njt
+ * @author jtalbut
  */
 public interface ChannelHandler {
     void handle(Channel channel) throws Exception;

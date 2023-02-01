@@ -15,7 +15,7 @@ import io.vertx.core.json.JsonObject;
 
 /**
  *
- * @author njt
+ * @author jtalbut
  */
 @DataObject(generateConverter = true)
 public class RabbitMQPublisherConfirmation {

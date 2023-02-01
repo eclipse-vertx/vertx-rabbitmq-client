@@ -38,5 +38,6 @@ public interface RabbitMQConnection {
   Future<Void> close();
   
   Future<Void> close(int closeCode, String closeMessage, int timeout);
-    
+
+  boolean isClosed();
 }

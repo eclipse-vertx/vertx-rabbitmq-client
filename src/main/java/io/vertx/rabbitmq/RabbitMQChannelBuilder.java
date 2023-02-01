@@ -40,7 +40,7 @@ import java.util.function.Supplier;
 
 /**
  *
- * @author njt
+ * @author jtalbut
  */
 public class RabbitMQChannelBuilder {
   

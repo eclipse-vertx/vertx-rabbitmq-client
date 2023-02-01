@@ -23,7 +23,6 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
-import static io.vertx.core.Vertx.vertx;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQChannel;
@@ -43,7 +42,7 @@ import java.util.function.Supplier;
 
 /**
  *
- * @author njt
+ * @author jtalbut
  */
 public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
 
@@ -201,7 +200,7 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
     channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, this)
             .onSuccess(tag -> promise.complete())
             .onFailure(ex -> {
-              if (reconnectIntervalMs > 0 && ! cancelled) {
+              if (reconnectIntervalMs > 0 && ! cancelled && ! connection.isClosed()) {
                 log.debug("Failed to consume " + queueName + " (" + ex.getClass() + ", \"" + ex.getMessage() + "\"), will try again after " + reconnectIntervalMs + "ms");
                 connection.getVertx().setTimer(reconnectIntervalMs, (id) -> {
                   consume(promise);
