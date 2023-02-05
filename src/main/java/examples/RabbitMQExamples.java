@@ -22,6 +22,7 @@ import io.vertx.rabbitmq.DefaultConsumer;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQClient;
+import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
@@ -60,6 +61,9 @@ public class RabbitMQExamples {
   private static final boolean QUEUE_AUTO_DELETE = false;
   private static final boolean PUBLISH_MANDATORY = false;
     
+  private RabbitMQConnection connection;
+  private RabbitMQChannel channel;
+  
   public void createConnectionWithUri() {
     Vertx vertx = Vertx.vertx();
     RabbitMQOptions config = new RabbitMQOptions();
@@ -68,11 +72,19 @@ public class RabbitMQExamples {
     
     RabbitMQClient.connect(vertx, config)
             .compose(connection -> {
+              this.connection = connection;
               RabbitMQChannelBuilder builder = connection.createChannelBuilder();
               return builder.openChannel();
             })
             .compose(channel -> {
+              this.channel = channel;
               return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+            })
+            .compose(v -> {
+              return channel.close();
+            })
+            .compose(v -> {
+              return connection.close();
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
