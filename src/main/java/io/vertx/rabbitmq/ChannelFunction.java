@@ -20,18 +20,14 @@ import com.rabbitmq.client.Channel;
 /**
  * Simple Handler class that accepts a synchronous Channel and returns a value.
  * 
- * 
- * 
  * The handler may also throw an Exception.
  * 
  * @author jtalbut
+ * @param <T> The type of object that the handler method returns.
  */
 public interface ChannelFunction<T> {
   
     /**
-     * 
-     * 
-     * 
      * @param channel
      * @return
      * @throws Exception 
