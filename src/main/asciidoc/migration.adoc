@@ -1,0 +1,4 @@
+= RabbitMQ Client for Vert.x
+
+The new Vert.x rabbitmq client differs in a number of fundamental ways from the previous version.
+

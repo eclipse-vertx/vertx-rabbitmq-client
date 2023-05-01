@@ -1,0 +1,467 @@
+= RabbitMQ Client for Vert.x
+
+A Vert.x client allowing applications to interact with a RabbitMQ broker (AMQP 0.9.1) via a reactive API.
+
+**This service is experimental and the APIs are likely to change before settling down.**
+
+The client is a wrapper around the standard Java RabbitMQ client, with most interactions wrapped in a call to executeBlocking.
+There should not be many things that can be done with the standard Java RabbitMQ client that cannot be done with this Vertx client
+ - the one exception is that this Vertx client only supports NIO.
+
+:toc:
+
+== Getting Started
+
+=== Maven
+
+Add the following dependency to your maven project
+
+[source,xml,subs="+attributes"]
+----
+<dependency>
+  <groupId>io.vertx</groupId>
+  <artifactId>vertx-rabbitmq-client</artifactId>
+  <version>${maven.version}</version>
+</dependency>
+----
+
+=== Gradle
+
+Add the following dependency to your gradle project
+
+[source,groovy,subs="+attributes"]
+----
+dependencies {
+  compile 'io.vertx:vertx-rabbitmq-client:${maven.version}'
+}
+----
+
+=== Create a connection
+
+The object model of the Vertx client mirrors that of the Java RabbitMQ client - a Connection must be created and then this can be used to create multiple Channels.
+Interactions with the broker take place over channels.
+
+The intended behaviour with this library is that a single Connection should be created and a Channel should be created for each type of thing that is to be done.
+For consuming messages this implies a single RabbitMQChannel for each queue being consumed.
+For publishing messages a single RabbitMQChannel can be used for all messages, but this can make handling confirmations more complex, so the recommendation
+is to create as many channels as necessary to keep your structures simple (i.e. to inject a RabbitMQConnection and then create a RabbitMQChannel locally
+for each source of messages).
+
+In all the examples here the connection name is set - this is technically optional but it can make your sysadmins life easier if it set
+, so please do set it to something that usefully identifies the process and block of code making the connection.
+If the connection name is not set the default of ManagementFactory.getRuntimeMXBean().getName() will be used, which is a reasonable
+default when there is only a single connection in the process and the process is not running in a container 
+(for swarm or kubernetes containers it's a good idea to capture the node name into an environment variable that can be used in the connecitn name).
+
+You can create a connection and channel as follows using a full amqp uri:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithUri}
+----
+
+Or you can also specify individual parameters manually:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithManualParameters}
+----
+
+You can also set multiples addresses to connect to a cluster:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithMultipleHost}
+----
+Using an AMQP URI and using multiple addresses are mutually exclusive, but the setting of individual parameters may be combined with either of them.
+This allows for an AMQP URI to be used for most aspects of the connection, but for the username and password to be configured independently.
+Individually set parameters will always override parameters extracted from the URI:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithUriAndCredentials}
+----
+
+=== Shutdown
+
+When they are no longer required RabbitMQChannels and RabbitMQConnections should be closed.
+As a general rule a single RabbitMQConnection should be opened as soon as it is required and should be kept open for the life of the application.
+A separate RabbitMQChannel should be opened for each consumer and RabbitMQChannels should be opened to make the implementation
+of Confirmation handling simple (i.e. if you do not use confirmations a single channel can be used for all publishing
+, but this would prevent reliable messaging).
+The RabbitMQConsumer and RabbitMQPublisher classes each have a dedicated channel internally that they will close when they are cancelled.
+
+Relying upon the closure of the RabbitMQConnection to close the RabbitMQChannels will work, but will probably result is spurious error
+messages in your logs.
+
+=== Declare Exchanges and Queues
+
+The examples so far have all required that the exchange used already exists on the broker.
+Whilst some deployments work this way, it is also common to declare exchanges and queues in code when a channel is established.
+
+Broker objects can be declared using the RabbitMQManagementChannel:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithUriAndUseMgmtChannel}
+----
+
+This approach causes race conditions when combined with the <<RECONNECT,Reconnecting>> mechanism, so the preferred approach is to declare
+a callback that will run each time a channel is established:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionAndDeclareExchangeInHandler}
+----
+
+The channel open handler has access to the raw Channel of the underlying client library and calls on it may be used synchronously 
+(the callback will execute in a blocking thread).
+
+It is also possible to access the raw channel on a blocking thread without using the channel open handler if there is some functionality
+that you require that does not have a suitable delegate:
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionWithUriCreateExchangeOnChannel}
+----
+
+
+=== [[TLS,TLS]]
+
+The first thing to note is that RabbitMQ supports TLSv1.2 and TLSv1.3, depending upon its configuration.
+Older versions of TLS _can_ be configured, but shouldn't be.
+The Java RabbitMQ client cannot be configured to do TLS version negotiation if any other options are specified
+, so it will usually be necessary to ensure that the correct version is configured in RabbitMQOptions.
+There is a bug in versions of the Java RabbitMQ client prior to 5.14.0 that causes it to hang on connection when TLSv1.3 is used with NIO
+- please call RabbitMQOptions#setSecureTransportProtocol("TLSv1.2") if you have to use an earlier version
+(the standard version specified in the pom file for this library is not affected by this bug).
+
+There are three basic types of TLs connection that can be made to a RabbitMQ server:
+
+* Unsecure.
+The server uses a self-signed certificate and the client doesn't care - this should only be used for testing.
+See <<_unsecure_tls_connection>>
+* Public Certificate Chain.
+The server uses a certificate signed by a public CA.
+See <<_public_certificate_chain_tls_connection>>
+* Self-signed, but secure.
+The server uses a certificate that isn't signed by a public CA, but the client has a copy of the certificate and will validate it.
+See <<_private_certificate_chain_with_secure_tls_connection>>
+
+In addition to the above the client may be configured to use client certificates to identify the user to the server (see <<_private_certificate_chain_with_client_certificate_tls_connection>>).
+Note that to do anything useful with client certificates peer verification must be enabled server side (https://www.rabbitmq.com/ssl.html#peer-verification-configuration):
+....
+ssl_options.verify = verify_peer
+ssl_options.fail_if_no_peer_cert = true
+....
+
+
+There are six options in the RabbitMQOptions that control TLS connections.
+
+* SecureTransportProtocol
++
+This defaults to TLSv1.3 currently (use TLSv1.2 if using a version of the RabbitMQ client library before 5.14.0).
+* TrustAll
++
+If set to true the client will accept any certificate, no further configuration is considered.
+* TrustStoreOptions
++
+Can be used to set the TrustManagerFactory for server certificates.
+Any other options in the JksOptions class are ignored.
+If the TrustManagerFactory is null (or if TrustStoreOptions isn't set and TrustAll is false) the client will use public certificate chain verification.
+* KeyStoreOptions
++
+Can be used to set the KeyManagerFactory for client certificates.
+Any other options in the JksOptions class are ignored.
+If both the KeyManagerFactory is set to null (or if the KeyStoreOptions aren't set) no client certificate will be sent to the server.
+* TlsHostnameVerification
++
+If set to true (the default) the hostname in the server certificate will be verified.
+This should usually be true for public certificate but often needs to be false for private certificate authorities (or self-signed certs).
+* SslContextFactory
++
+If all else fails the SslContextFactory can be provided to have full control of the SSLContext used.
+
+This provides very simple defaults, if TrustAll is true anything will work, if TrustAll is false public certificate chains should work.
+Extra steps are only required for private certificate chains or specific versions of TLS.
+
+==== Unsecure TLS Connection
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createWithInsecureServer}
+----
+==== Public Certificate Chain TLS Connection
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createWithPublicCertChain}
+----
+==== Private Certificate Chain with Secure TLS Connection
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createWithSpecificCert}
+----
+==== Private Certificate Chain With Client Certificate TLS Connection
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createWithClientCert}
+----
+==== Setting the SslContextFactory manually
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createWithSslContextFactory}
+----
+
+== [[RECONNECT,Reconnecting]]
+
+There are two separate and partially incompatible mechanisms for handling reconnections in the vertx-rabbitmq-client:
+
+* Java RabbitMQ client library auto recovery (referred to exclusively as "recovery" throughout the documentation);
+
+* vertx-rabbitmq-client reconnections built into this library (referred to exclusively as "reconnection" throughout the documentation).
+
+Neither mechanism is enabled by default.
+
+The auto recovery mechanism provided by the Java RabbitMQ client library does not work in two specific situations:
+
+* If the first attempt to connect to the server fails no recovery will be attempted.
+
+* If the server shuts down cleanly the client will simply be notified of the shutdown and no recovery will be attempted.
+
+The lack of retry on the initial connection can be a serious disadvantage in an entirely dynamic containerised environment where 
+the broker and client are started at the same time.
+
+In order to use the Java RabbitMQ client library auto recovery it is necessary to enable it:
+[source, java]
+----
+RabbitMQOptions options = new RabbitMQOptions();
+options.setAutomaticRecoveryEnabled(true);
+----
+The client library will also attempt topology recovery as detailed in its documentation 
+(https://www.rabbitmq.com/api-guide.html#recovery).
+This is enabled by default in the library and is not exposed in the vertx-rabbitmq-client RabbitMQOptions.
+
+
+
+Alternatively the vertx-rabbitmq-client may be configured to reconnect to the RabbitMQ server whenever there is a connection problem.
+The failure of a connection could be caused by a transient network failure 
+(where the client would probably connect back to the same RabbitMQ server) or it could be caused by a failover scenario.
+This approach is more brutal than that followed by the client library 
+- the vertx-rabbitmq-client reconnections work by closing the connection when the client library reports a problem and then 
+repeatedly trying to reconnect from scratch.
+
+The reconnection policy can be configured by setting the {@link io.vertx.rabbitmq.RabbitMQOptions#setReconnectInterval(int)}
+, {@link io.vertx.rabbitmq.RabbitMQOptions#setInitialConnectAttempts(int)} and
+{@link io.vertx.rabbitmq.RabbitMQOptions#setReconnectAttempts(int)} properties in the configuration:
+[source, java]
+----
+RabbitMQOptions options = new RabbitMQOptions();
+options.setAutomaticRecoveryEnabled(false);
+options.setInitialConnectAttempts(Integer.MAX_VALUE);
+options.setReconnectAttempts(Integer.MAX_VALUE);
+options.setReconnectInterval(500);
+----
+
+The vertx-rabbitmq-client reconnections do not feature any form of _automatic_ topology recovery, but any ChannelOpenHandlers configured in
+the RabbitMQChannelBuilder will be run each time a Channel is reopened.
+Using ChannelOpenHandlers to configure the necessary broker topology avoids race conditions where messages are sent before 
+exchanges and queues have been configured.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConnectionAndDeclareExchangeInHandler}
+----
+
+The ChannelOpenHandlers are called each time a channel is established by the vertx-rabbitmq-client.
+This means that it is run the first time a connection is established when the Java client library automatic recovery is enabled
+, but it is not run when the Java client library recovers a connection 
+(in this situation the Java RabbitMQ client library topology recovery will be used).
+
+If a RabbitMQConsumer is listening for messages on an auto-delete server-named queue and the broker restarts the queue will have 
+been removed by the time the client reconnects.
+In this instance it is necessary to both recreate the queue and set the new queue name on the RabbitMQConsumer.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#connectionEstablishedCallbackForServerNamedAutoDeleteQueue}
+----
+
+
+As a general rule the two recovery mechanisms do not work well together, however
+here is one way in which the two recovery mechanisms can be safely combined: 
+using the vertx-rabbitmq-client reconnections for the initial connection 
+and then using the RabbitMQ client library recovery after that.
+This is easily enabled and works around one of the significant limitations of the client recovery:
+[source, java]
+----
+RabbitMQOptions options = new RabbitMQOptions();
+options.setAutomaticRecoveryEnabled(false);
+options.setInitialConnectAttempts(100);
+options.setReconnectAttempts(0);
+options.setReconnectInterval(500);
+----
+
+Note that in the kind of entirely dynamic containerised environment in which this is most valuable the number of initial recovery attempts should be 
+constrained to a value that gives enough attempts in normal circumstances, but that does result in a failure if the broker never becomes available.
+The correct values for this will depend on how long it takes for the broker to be accessible in normal circumstances.
+
+== Operations
+
+The following are some examples of the operations supported by the RabbitMQService API.
+Consult the javadoc/documentation for detailed information on all API methods.
+
+=== Publish
+
+Publish a message to a queue
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublish}
+----
+
+=== Consume
+
+Before attempting to consume messages from a broker the most important thing to decide is what will happen when things go wrong.
+From the consumer's point of view there are three basic options:
+* Ignore it - send an ack to the broker anyway.
+  Consider your mechanism for tracking and alerting (especially if all messages are failing).
+* Tell the broker about it - send a nack to the broker.
+  This can be the most thorough solution, but it requires additional configuration on the broker (typically a dead letter exchange).
+* Shut down or pause operations.
+  A viable option if the consumer can detect that it will not be able to process any messages.
+
+It is vital that a consumer sends an ack (or nack) for all messages received (or shuts itself down).
+Messages not acked will back up and block on the broker until the consumer shuts down.
+A consumer can be configured to auto-ack messages, but that can lead to message loss.
+
+With this library your next choice is whether you need to use a Vertx-based consumer or not.
+If the handling of a message can take place in a single method on a single thread a raw consumer will be more efficient than a Vertx-based one,
+but in most circumstances the default should be to choose the Vertx-based consumer (especially if the handler will interact with
+other Vertx-based objects).
+
+The raw consumer is a standard RabbitMQ Consumer (https://www.rabbitmq.com/consumers.html) that runs on a RabbitMQ-managed thread.
+The handler will not be called concurrently, no more messages will be received until the current handler returns and typically an
+ack or nack should be sent from the handler method directly.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicConsumeRaw}
+----
+
+The Vertx-based consumer receives messages from RabbitMQ and passes them on to a handler running on a Vertx context.
+The RabbitMQ thread that the internal handler runs on will block until the Future returned by the Vertx consumer
+is completed.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#consumer}
+----
+
+
+== Message Codecs
+
+All messages sent or received by this library are passed through an instance of RabbitMQMessageCodec.
+This interface is analagous to the https://vertx.io/docs/apidocs/io/vertx/core/eventbus/MessageCodec.html[MessageCodec] interface used on the Vertx EventBus.
+There are a few differences between the two:
+
+* The native message format for Rabbit Messages is byte[], not https://vertx.io/docs/apidocs/io/vertx/core/buffer/Buffer.html[Buffer].
+* When publishing a message the Message Codec may specify values for the Content-Type and Content-Encoding that will override any values set in the properties passed in.
+* The selection of which Message Codec to use, and the default codecs configured, is different.
+
+The body argument to basicPublish is an Object type.
+The values passed in are run through the RabbitMQCodecManager, which applies a codec in the following order:
+
+. If a codec name is specified in the RabbitMQPublishOptions that is used.
+. If the body is a byte[] the default RabbitMQByteArrayMessageCodec is used.
+. If the body is null the RabbitMQNullMessageCodec is used.
+. If the body class is found in the default codec map the codec found there is used.
+. If the body is a Buffer the RabbitMQBufferMessageCodec is used.
+. If the body is a String the RabbitMQStringMessageCodec is used.
+. If the body is a JsonObject the RabbitMQJsonObjectMessageCodec is used.
+. If the body is a JsonArray the RabbitMQJsonArrayMessageCodec is used.
+
+This ordering means that it is always possible to override the default codec, but provides reasonable defaults for most circumstances.
+
+The instance of RabbitMQCodecManager is internal to the RabbitMQChannel.
+If a custom codec is used it is necessary to register it on all RabbitMQChannel instances that require it.
+
+The standard codecs are all stateless and available as static members of the RabbitMQChannelBuilder.
+The RabbitMQChannelBuilder.BYTE_ARRAY_MESSAGE_CODEC is effectively a no-op and is the codec to choose by default if no conversion is
+required.
+
+Publish a message using a named custom codec.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublishNamedCodec}
+----
+
+Publish a message using a typed custom codec.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#basicPublishTypedCodec}
+----
+
+=== Consuming Typed Messages
+
+When creating a consumer a single codec must be chosen to be used for all messages received.
+
+It would be possible for a consumer to use fields from the envelope (content-type and content-encoding) to choose
+a codec from the codec manager, but this would not help with type safety as only one handler can be defined for a consumer 
+and that would not be able to specialize for Object.
+
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createConsumerWithCodec}
+----
+
+
+== Reliable Publishing
+
+Message brokers can be used in two different ways:
+
+. At most once delivery.
+. At least once delivery.
+
+(See https://www.rabbitmq.com/reliability.html).
+
+Achieving at-most-once delivery is the easiest and the default, 
+and is usually not what is required as it makes no guarantees that messages will arrive at all.
+
+In order to achieve at least once delivery publishers must confirm that messages 
+they have sent have been received by the broker and consumers must accept that individual messages
+may be received more than once.
+Publishers confirming messages can be done either synchronously or asynchronously.
+Synchronous message confirmation is very simple, but has a bad effect on publish rate as each published message
+must be followed by a call to wait for the broker to confirm receipt.
+Synchronous message confirmations also present a problem for an asynchronous system like Vertx - 
+the client must ensure that no calls to basicPublish are made between the publishing of the message(s) they are
+concerned about and the completion of the call to waitForConfirms.
+
+In order to reduce a boiler plate associated with handling asynchronous confirmations this library provides the RabbitMQPublisher class.
+This class handles the confirmation messages and provides a single Future that is completed when the message is acknowledged.
+
+The Publisher creates a Promise for each message published and stores them in a Deque,
+When confirmations are received from RabbitMQ the Promises are completed.
+
+If the connection to the server breaks before acknowledgements are received the Publisher can be configured to either 
+resend the unacknowledged messages or to fail the Promises for those messages.
+Enabling resending has a slight overhead as all transmitted messages must be retained until they have been confirmed
+but it is necessary for reliable publishing without further input from the caller.
+
+The table below can be used to get an idea of the throughput that can be achieved with different approaches.
+These values were obtained from running the RabbitMQPublisherPerformanceTest test on a laptop with an Intel i9-12900HK and 64GB of RAM
+, different setups and network configurations will produce different results, though I expect the general trends to be the same.
+
+.Performance metrics for different publishing approaches
+[cols="<,>,>", options="header,footer"]
+|===
+| Approach | Time for 50000 messages (seconds) | Rate (messages/second)
+| Fire and forget (no message confirmation) | 0.149s | 335570 M/s
+| Wait on each message | 40.511s | 1234 M/s
+| Wait after 10 messages | 7.436s | 6724 M/s
+| Wait after 100 messages | 3.985s | 12547 M/s
+| Wait after 1000 messages | 2.362s | 21168 M/s
+| Future publisher 2 with retries | 1.783s | 28042 M/s
+| Future publisher 2 without retries | 2.217s | 22552 M/s
+|===
+
+
+
+
+
+
+
