@@ -46,7 +46,7 @@ openssl pkcs12 -export -out client_certificate.p12 -in client_certificate.pem -i
     -passout pass:password
 cd ..
 
-# Finally, put the server cert into a Java keystore:
+# Finally, put the server cert into a Java keystore (use 'password' for password):
 keytool -import -alias server1 -file server/server_certificate.pem -keystore localhost-test-rabbit-store
 ```
 
