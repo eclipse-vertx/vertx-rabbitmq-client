@@ -17,6 +17,7 @@ import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.Envelope;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
 import io.vertx.rabbitmq.DefaultConsumer;
 import io.vertx.rabbitmq.RabbitMQChannel;
@@ -26,6 +27,7 @@ import io.vertx.rabbitmq.RabbitMQConnection;
 import io.vertx.rabbitmq.RabbitMQConsumerOptions;
 import io.vertx.rabbitmq.RabbitMQOptions;
 import io.vertx.rabbitmq.RabbitMQPublishOptions;
+import io.vertx.rabbitmq.RabbitMQPublisherOptions;
 import io.vertx.rabbitmq.impl.RabbitMQCodecManager;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,7 +38,10 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
@@ -53,6 +58,7 @@ public class RabbitMQExamples {
   
   private final String EXCHANGE_NAME = this.getClass().getName() + "Exchange";
   private final String QUEUE_NAME = this.getClass().getName() + "Queue";
+  private final String ROUTING_KEY = "";
   private static final boolean EXCHANGE_DURABLE = true;
   private static final boolean EXCHANGE_AUTO_DELETE = false;
   private static final BuiltinExchangeType EXCHANGE_TYPE = BuiltinExchangeType.FANOUT;
@@ -78,7 +84,7 @@ public class RabbitMQExamples {
             })
             .compose(channel -> {
               this.channel = channel;
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, ROUTING_KEY, PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .compose(v -> {
               return channel.close();
@@ -104,7 +110,7 @@ public class RabbitMQExamples {
               return connection.createChannelBuilder().openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, ROUTING_KEY, PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -128,7 +134,7 @@ public class RabbitMQExamples {
               return connection.createChannelBuilder().openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, ROUTING_KEY, PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -149,7 +155,7 @@ public class RabbitMQExamples {
               return builder.openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, ROUTING_KEY, PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -173,7 +179,7 @@ public class RabbitMQExamples {
                       .map(channel);
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, ROUTING_KEY, PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -195,7 +201,7 @@ public class RabbitMQExamples {
                       .openChannel();
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, ROUTING_KEY, PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -219,7 +225,7 @@ public class RabbitMQExamples {
               }).map(channel);
             })
             .compose(channel -> {
-              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, "", PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
+              return channel.basicPublish(new RabbitMQPublishOptions(), EXCHANGE_NAME, ROUTING_KEY, PUBLISH_MANDATORY, new AMQP.BasicProperties(), "body");
             })
             .onSuccess(v -> logger.info("Message published"))
             .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
@@ -431,6 +437,31 @@ public class RabbitMQExamples {
             ;
   }  
   
+  public void createPublisher(Vertx vertx, RabbitMQOptions config, Map<String, JsonObject> messages) {
+    RabbitMQClient.connect(vertx, config)
+            .compose(connection -> {
+              return connection.createChannelBuilder()
+                      .createPublisher(EXCHANGE_NAME
+                              , RabbitMQChannelBuilder.JSON_OBJECT_MESSAGE_CODEC
+                              , new RabbitMQPublisherOptions().setResendOnReconnect(true)
+                      );
+            })
+            .compose(publisher -> {
+              List<Future<Void>> futures = new ArrayList<>(messages.size());
+              messages.forEach((k,v) -> {
+                AMQP.BasicProperties properties = new AMQP.BasicProperties.Builder()
+                        .messageId(k)
+                        .build();
+                futures.add(publisher.publish(ROUTING_KEY, properties, v));
+              });
+              
+              return Future.all(futures);              
+            })
+            .onSuccess(v -> logger.info("All message sent and confirmed"))
+            .onFailure(ex -> logger.log(Level.SEVERE, "Failed: {0}", ex))
+            ;
+  }  
+  
   public void connectionEstablishedCallbackForServerNamedAutoDeleteQueue(Vertx vertx, RabbitMQOptions options) {
     String queueName[] = new String[1];
     RabbitMQClient.connect(vertx, options)
@@ -439,7 +470,7 @@ public class RabbitMQExamples {
                     .withChannelOpenHandler(chann -> {
                       chann.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, EXCHANGE_DURABLE, EXCHANGE_AUTO_DELETE, null);
                       // No queue name passed in, to use an auto created queue
-                      DeclareOk dok = chann.queueDeclare("", QUEUE_DURABLE, QUEUE_EXCLUSIVE, QUEUE_AUTO_DELETE, null);
+                      DeclareOk dok = chann.queueDeclare(QUEUE_NAME, QUEUE_DURABLE, QUEUE_EXCLUSIVE, QUEUE_AUTO_DELETE, null);
                       // Captire the queue name to use for the bind and the the consume
                       queueName[0] = dok.getQueue();
                       chann.queueBind(queueName[0], EXCHANGE_NAME, "", null);
@@ -516,7 +547,7 @@ public class RabbitMQExamples {
                       chann.queueBind(QUEUE_NAME, EXCHANGE_NAME, "", null);
                     })
                     .createConsumer(
-                            RabbitMQCodecManager.BYTE_ARRAY_MESSAGE_CODEC
+                            RabbitMQCodecManager.STRING_MESSAGE_CODEC
                             , QUEUE_NAME
                             , null
                             , new RabbitMQConsumerOptions()
@@ -524,11 +555,11 @@ public class RabbitMQExamples {
                             , (consumer, message) -> {
                               // In most cases consumers will have some asynchronouse code
                               // The RabbitMQ thread is blocked until the Future returned here is completed.
-                              return vertx.<Void>executeBlocking(promise -> {
-                                System.out.println(new String(message.body(), StandardCharsets.UTF_8));
-                                message.basicAck()
-                                        .andThen(promise)
-                                        ;
+                              return vertx.<Void>executeBlocking(() -> {
+                                System.out.println(message.body());
+                                return null;
+                              }).compose(v -> {
+                                return message.basicAck();
                               });
                             }
                     );

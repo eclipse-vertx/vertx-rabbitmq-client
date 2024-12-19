@@ -50,8 +50,7 @@ for each source of messages).
 In all the examples here the connection name is set - this is technically optional but it can make your sysadmins life easier if it set
 , so please do set it to something that usefully identifies the process and block of code making the connection.
 If the connection name is not set the default of ManagementFactory.getRuntimeMXBean().getName() will be used, which is a reasonable
-default when there is only a single connection in the process and the process is not running in a container 
-(for swarm or kubernetes containers it's a good idea to capture the node name into an environment variable that can be used in the connecitn name).
+default when there is only a single connection in the process and the process is not running in a container.
 
 You can create a connection and channel as follows using a full amqp uri:
 [source,$lang]
@@ -81,13 +80,10 @@ Individually set parameters will always override parameters extracted from the U
 === Shutdown
 
 When they are no longer required RabbitMQChannels and RabbitMQConnections should be closed.
-As a general rule a single RabbitMQConnection should be opened as soon as it is required and should be kept open for the life of the application.
-A separate RabbitMQChannel should be opened for each consumer and RabbitMQChannels should be opened to make the implementation
-of Confirmation handling simple (i.e. if you do not use confirmations a single channel can be used for all publishing
-, but this would prevent reliable messaging).
+
 The RabbitMQConsumer and RabbitMQPublisher classes each have a dedicated channel internally that they will close when they are cancelled.
 
-Relying upon the closure of the RabbitMQConnection to close the RabbitMQChannels will work, but will probably result is spurious error
+Relying upon the closure of the RabbitMQConnection to close the RabbitMQChannels will work, but will probably result in spurious error
 messages in your logs.
 
 === Declare Exchanges and Queues
@@ -129,7 +125,7 @@ There is a bug in versions of the Java RabbitMQ client prior to 5.14.0 that caus
 - please call RabbitMQOptions#setSecureTransportProtocol("TLSv1.2") if you have to use an earlier version
 (the standard version specified in the pom file for this library is not affected by this bug).
 
-There are three basic types of TLs connection that can be made to a RabbitMQ server:
+There are three basic types of TLS connection that can be made to a RabbitMQ server:
 
 * Unsecure.
 The server uses a self-signed certificate and the client doesn't care - this should only be used for testing.
@@ -238,9 +234,8 @@ This is enabled by default in the library and is not exposed in the vertx-rabbit
 Alternatively the vertx-rabbitmq-client may be configured to reconnect to the RabbitMQ server whenever there is a connection problem.
 The failure of a connection could be caused by a transient network failure 
 (where the client would probably connect back to the same RabbitMQ server) or it could be caused by a failover scenario.
-This approach is more brutal than that followed by the client library 
-- the vertx-rabbitmq-client reconnections work by closing the connection when the client library reports a problem and then 
-repeatedly trying to reconnect from scratch.
+This approach is more brutal than that followed by the client library - the vertx-rabbitmq-client reconnections work by 
+closing the connection when the client library reports a problem and then repeatedly trying to reconnect from scratch.
 
 The reconnection policy can be configured by setting the {@link io.vertx.rabbitmq.RabbitMQOptions#setReconnectInterval(int)}
 , {@link io.vertx.rabbitmq.RabbitMQOptions#setInitialConnectAttempts(int)} and
@@ -459,8 +454,17 @@ These values were obtained from running the RabbitMQPublisherPerformanceTest tes
 | Future publisher 2 without retries | 2.217s | 22552 M/s
 |===
 
+[source,$lang]
+----
+{@link examples.RabbitMQExamples#createPublisher}
+----
 
+Note that the Future returned by the method {@link io.vertx.rabbitmq.RabbitMQPublisher#publish} is only completed when the message 
+has been confirmed.
+It is not necessary to wait for this Future to be completed before calling publish again.
 
+Also, the example demonstrates the use of the JSON_OBJECT_MESSAGE_CODEC, other codecs may be used to automatically convert from 
+any class to the byte array that is used on the wire.
 
 
 
