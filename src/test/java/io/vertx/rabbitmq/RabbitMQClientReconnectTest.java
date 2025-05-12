@@ -37,15 +37,15 @@ import org.testcontainers.containers.GenericContainer;
 
 @RunWith(VertxUnitRunner.class)
 public class RabbitMQClientReconnectTest {
-  
+
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
 
   /**
    * This test verifies that the RabbitMQ Java client reconnection logic works as long as the vertx reconnect attempts is set to zero.
    *
-   * The change that makes this work is in the basicConsumer, where the shutdown handler is only set if retries > 0. 
-   * Without that change the vertx client shutdown handler is called, 
+   * The change that makes this work is in the basicConsumer, where the shutdown handler is only set if retries > 0.
+   * Without that change the vertx client shutdown handler is called,
    * interrupting the java client reconnection logic, even though the vertx reconnection won't work because retries is zero.
    *
    */
@@ -60,22 +60,22 @@ public class RabbitMQClientReconnectTest {
 
   private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
   private Proxy proxy;
-  
+
   private final Vertx vertx;
   private TestContext ctx;
   private RabbitMQConnection connection;
 
   private final Set<Long> receivedMessages = new HashSet<>();
-  
+
   private final Promise<Void> firstMessagesReceived = Promise.promise();
   private final AtomicBoolean hasShutdown = new AtomicBoolean(false);
   private final Promise<Void> messageSentAfterShutdown = Promise.promise();
   private final Promise<Long> allMessagesSent = Promise.promise();
   private final Promise<Long> allMessagesReceived = Promise.promise();
-  
+
   private RabbitMQPublisher<String> publisher;
   private RabbitMQConsumer consumer;
-  
+
   public RabbitMQClientReconnectTest() throws IOException {
     logger.info("Constructing");
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
@@ -106,12 +106,12 @@ public class RabbitMQClientReconnectTest {
     options.setReconnectAttempts(100);
     return options;
   }
-  
+
   @Before
   public void setup(TestContext testContext) throws Exception {
     this.proxy = new Proxy(vertx, CONTAINER.getMappedPort(5672));
     this.proxy.startProxy();
-    
+
     RabbitMQClient.connect(vertx, getRabbitMQOptions())
             .onSuccess(conn -> {
               this.connection = conn;
@@ -128,7 +128,7 @@ public class RabbitMQClientReconnectTest {
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     this.ctx = ctx;
     Async async = ctx.async();
-        
+
     // Have to react to allMessagesSent completing in case it completes after the last message is received.
     allMessagesSent.future().onSuccess(count -> {
       synchronized(receivedMessages) {
@@ -137,7 +137,7 @@ public class RabbitMQClientReconnectTest {
         }
       }
     });
-    
+
     createConsumer()
             .compose(v -> createPublisher())
             .compose(v -> {
@@ -173,12 +173,12 @@ public class RabbitMQClientReconnectTest {
             .mapEmpty()
             ;
   }
-  
+
   private void sendMessages() {
     AtomicLong counter = new AtomicLong();
     AtomicLong postShutdownCount = new AtomicLong(20);
     AtomicLong timerId = new AtomicLong();
-    
+
     /*
     Send a message every second, with the message being a strictly increasing integer.
     After sending the first message when 'hasShutdown' is set complete the messageSentAfterShutdown to notify the main test.
@@ -212,8 +212,8 @@ public class RabbitMQClientReconnectTest {
       }
     }
     return message.basicAck();
-  }  
-  
+  }
+
   private Future<Void> createConsumer() {
     return connection.createChannelBuilder()
             .withChannelOpenHandler(rawChannel -> {
@@ -228,17 +228,17 @@ public class RabbitMQClientReconnectTest {
   }
 
   private Future<Void> breakConnection() {
-    return vertx.executeBlocking(promise -> {
+    return vertx.executeBlocking(() -> {
       logger.info("Blocking proxy");
       proxy.stopProxy();
       logger.info("Blocked proxy");
-      promise.complete();      
       hasShutdown.set(true);
+      return null;
     });
   }
-  
+
   private Future<Void> reestablishConnection() {
-    return vertx.executeBlocking(promise -> {
+    return vertx.executeBlocking(() -> {
       logger.info("Unblocking proxy");
       try {
         proxy.startProxy();
@@ -246,8 +246,8 @@ public class RabbitMQClientReconnectTest {
         logger.error("Failed to restart proxy");
       }
       logger.info("Unblocked proxy");
-      promise.complete();      
+      return null;
     });
   }
-  
+
 }

@@ -30,6 +30,7 @@ import com.rabbitmq.client.impl.recovery.RecoveredQueueNameSupplier;
 import com.rabbitmq.client.impl.recovery.RetryHandler;
 import com.rabbitmq.client.impl.recovery.TopologyRecoveryFilter;
 import io.vertx.codegen.annotations.DataObject;
+import io.vertx.codegen.json.annotations.JsonGen;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
 import java.util.ArrayList;
@@ -49,7 +50,8 @@ import javax.net.SocketFactory;
  *
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
-@DataObject(generateConverter = true, inheritConverter = true)
+@DataObject
+@JsonGen(inheritConverter = true)
 public class RabbitMQOptions {
 
   /**
@@ -81,7 +83,7 @@ public class RabbitMQOptions {
    * The default connection timeout = {@code 60000}.
    */
   public static final int DEFAULT_CONNECTION_TIMEOUT = ConnectionFactory.DEFAULT_CONNECTION_TIMEOUT;
-  
+
   /**
    * The default shutdown timeout = {@code 10000}.
    */
@@ -156,12 +158,12 @@ public class RabbitMQOptions {
    * The RabbitMQ client does not do protocol negotiation, so this set should contain only one value.
    */
   public static final String DEFAULT_SECURE_TRANSPORT_PROTOCOL = "TLSv1.3";
-  
+
   /**
    * The default DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION value = true
    */
   public static final boolean DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION = true;
-  
+
   /**
    * The default connection name = {@code VertxRabbitMQ}.
    * It is strongly recommended that all clients change this to something more identifying.
@@ -172,12 +174,12 @@ public class RabbitMQOptions {
    * The default RPC timeout value = {@code 10 minutes}.
    */
   public static final int DEFAULT_CHANNEL_RPC_TIMEOUT = ConnectionFactory.DEFAULT_CHANNEL_RPC_TIMEOUT;
-  
+
   /**
    * The default value for whether or not channels check the reply type of an RPC call = {@code false}.
    */
   public static final boolean DEFAULT_CHANNEL_SHOULD_CHECK_RPC_RESPONSE_TYPE = false;
-  
+
   private String uri = null;
   private List<Address> addresses = Collections.emptyList();
   private String user;
@@ -192,12 +194,12 @@ public class RabbitMQOptions {
   private int requestedFrameMax;
   private int shutdownTimeout;
   private int workPoolTimeout;
-  
+
   private int channelRpcTimeout;
   private boolean channelShouldCheckRpcResponseType;
-  
+
   private boolean tlsHostnameVerification;
-  
+
   private int reconnectInterval;
   private int reconnectAttempts;
   private boolean ssl;
@@ -205,15 +207,15 @@ public class RabbitMQOptions {
   private String secureTransportProtocol;
   private JksOptions keyStoreOptions;
   private JksOptions trustStoreOptions;
-  
+
   // These three control the java RabbitMQ client automatic recovery
   private boolean automaticRecoveryEnabled;
   private Boolean topologyRecoveryEnabled;
   private long networkRecoveryInterval;
-  
+
   // This (and reconnectAttempts, reconnectInterval) control the reconnects implented in this library
   private int initialConnectAttempts;
-  
+
   private String connectionName;
 
   private Map<String, Object> clientProperties;
@@ -280,7 +282,7 @@ public class RabbitMQOptions {
     this.requestedFrameMax = other.requestedFrameMax;
     this.connectionName = other.connectionName;
     this.tlsHostnameVerification = other.tlsHostnameVerification;
-    
+
     this.reconnectInterval = other.reconnectInterval;
     this.reconnectAttempts = other.reconnectAttempts;
     this.ssl = other.ssl;
@@ -288,7 +290,7 @@ public class RabbitMQOptions {
     this.secureTransportProtocol = other.secureTransportProtocol;
     this.keyStoreOptions = other.keyStoreOptions;
     this.trustStoreOptions = other.trustStoreOptions;
-    
+
     this.channelRpcTimeout = other.channelRpcTimeout;
     this.channelShouldCheckRpcResponseType = other.channelShouldCheckRpcResponseType;
     this.clientProperties = other.clientProperties;
@@ -307,7 +309,7 @@ public class RabbitMQOptions {
     this.shutdownExecutor = other.shutdownExecutor;
     this.socketConfigurator = other.socketConfigurator;
     this.socketFactory = other.socketFactory;
-    this.sslContextFactory = other.sslContextFactory;    
+    this.sslContextFactory = other.sslContextFactory;
     this.threadFactory = other.threadFactory;
     this.topologyRecoveryExecutor = other.topologyRecoveryExecutor;
     this.topologyRecoveryFilter = other.topologyRecoveryFilter;
@@ -339,18 +341,18 @@ public class RabbitMQOptions {
     this.initialConnectAttempts = DEFAULT_INITIAL_CONNECT_ATTEMPTS;
     this.connectionName = DEFAULT_CONNECTION_NAME;
     this.tlsHostnameVerification = DEFAULT_ENABLED_TLS_HOSTNAME_VERIFICATION;
-    
+
     this.reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
     this.reconnectAttempts = DEFAULT_RECONNECT_ATTEMPTS;
     this.ssl = DEFAULT_SSL;
     this.trustAll = DEFAULT_TRUST_ALL;
     this.secureTransportProtocol = DEFAULT_SECURE_TRANSPORT_PROTOCOL;
-    
+
     this.channelRpcTimeout = DEFAULT_CHANNEL_RPC_TIMEOUT;
     this.channelShouldCheckRpcResponseType = DEFAULT_CHANNEL_SHOULD_CHECK_RPC_RESPONSE_TYPE;
     this.clientProperties = unLongStringMap(AMQConnection.defaultClientProperties());
   }
-  
+
   /**
    * The default client properties for AMQConnection uses the @link com.rabbitmq.client.LongString} class, which cannot be converted to JSON.
    * This method converts those LongStrings to plain Strings.
@@ -526,7 +528,7 @@ public class RabbitMQOptions {
 
   /**
    * Get the TCP connection timeout, in milliseconds.
-   * 
+   *
    * @return the TCP connection timeout.
    * @see com.rabbitmq.client.ConnectionFactory#setConnectionTimeout
    */
@@ -642,13 +644,13 @@ public class RabbitMQOptions {
 
   /**
    * Enable or disable reconnection, as implemented in this library, on initial connections.
-   * 
+   *
    * In some situations (primarily dynamic test environments) brokers will be brought up at the same time as clients
    * , and may not be up in time for the connection.
-   * 
+   *
    * To work around this initialConnectAttempts can be set to the number of attempts to make for that initial connection.
    * The default value of zero means that if the configuration is wrong it will be identified quickly.
-   * 
+   *
    * Note that the Java client recovery process will never attempt recovery on the initial connection.
    * It should be possible to combine a non-zero value for initial connect attempts with the Java client recovery process:
    * <pre>
@@ -656,17 +658,17 @@ public class RabbitMQOptions {
    * options.setInitialConnectAttempts(10);
    * options.setAutomaticRecoveryEnabled(true);
    * </pre>
-   * 
+   *
    * @param initialConnectAttempts number of attempts to make for the initial connection.
    * @return a reference to this, so the API can be used fluently
-   * 
+   *
    */
   public RabbitMQOptions setInitialConnectAttempts(int initialConnectAttempts) {
     this.initialConnectAttempts = initialConnectAttempts;
     return this;
   }
-  
-  
+
+
   /**
    * @return {@code true} because NIO Sockets are always enabled
    */
@@ -707,9 +709,9 @@ public class RabbitMQOptions {
   }
 
   /**
-   * 
+   *
    * @param trustAll
-   * @return 
+   * @return
    */
   public RabbitMQOptions setTrustAll(boolean trustAll) {
     this.trustAll = trustAll;
@@ -718,7 +720,7 @@ public class RabbitMQOptions {
 
   public boolean isTrustAll() {
     return trustAll;
-  }    
+  }
 
   public RabbitMQOptions setKeyStoreOptions(JksOptions options) {
     this.keyStoreOptions = options;
@@ -1018,7 +1020,7 @@ public class RabbitMQOptions {
 
   public JksOptions getKeyStoreOptions() {
     return keyStoreOptions;
-  }  
+  }
 
   public JksOptions getTrustStoreOptions() {
     return trustStoreOptions;
@@ -1028,6 +1030,6 @@ public class RabbitMQOptions {
     this.trustStoreOptions = trustStoreOptions;
     return this;
   }
-  
-  
+
+
 }

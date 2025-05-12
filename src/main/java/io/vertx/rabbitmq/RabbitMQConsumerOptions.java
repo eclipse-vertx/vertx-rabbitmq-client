@@ -11,6 +11,7 @@
 package io.vertx.rabbitmq;
 
 import io.vertx.codegen.annotations.DataObject;
+import io.vertx.codegen.json.annotations.JsonGen;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonObject;
 import java.util.Collections;
@@ -19,7 +20,8 @@ import java.util.Map;
 /**
  * Aimed to specify queue consumer settings when calling {@link RabbitMQClient#basicConsumer(String, QueueOptions, Handler)}
  */
-@DataObject(generateConverter = true)
+@DataObject
+@JsonGen(inheritConverter = true)
 public class RabbitMQConsumerOptions {
 
   private static final boolean DEFAULT_AUTO_ACK = true;
@@ -33,7 +35,7 @@ public class RabbitMQConsumerOptions {
   private String consumerTag = DEFAULT_CONSUMER_TAG;
 
   private Map<String, Object> arguments = Collections.EMPTY_MAP;
-  
+
   private Handler<RabbitMQConsumer> consumerOkHandler;
   private Handler<RabbitMQConsumer> cancelOkHandler;
   private Handler<RabbitMQConsumer> cancelHandler;
@@ -53,22 +55,22 @@ public class RabbitMQConsumerOptions {
     RabbitMQConsumerOptionsConverter.toJson(this, json);
     return json;
   }
-  
+
   public RabbitMQConsumerOptions setConsumerOkHandler(Handler<RabbitMQConsumer> handler) {
     this.consumerOkHandler = handler;
     return this;
   }
-  
+
   public RabbitMQConsumerOptions setCancelOkHandler(Handler<RabbitMQConsumer> handler) {
     this.cancelOkHandler = handler;
     return this;
   }
-  
+
   public RabbitMQConsumerOptions setCancelHandler(Handler<RabbitMQConsumer> handler) {
     this.cancelHandler = handler;
     return this;
   }
-  
+
   public RabbitMQConsumerOptions setShutdownSignalHandler(Handler<RabbitMQConsumer> handler) {
     this.shutdownSignalHandler = handler;
     return this;
@@ -78,7 +80,7 @@ public class RabbitMQConsumerOptions {
     this.consumerTag = consumerTag;
     return this;
   }
-  
+
   public Handler<RabbitMQConsumer> getRecoverOkHandler() {
     return recoverOkHandler;
   }
@@ -87,7 +89,7 @@ public class RabbitMQConsumerOptions {
     this.recoverOkHandler = recoverOkHandler;
     return this;
   }
-  
+
   public Handler<RabbitMQConsumer> getConsumerOkHandler() {
     return consumerOkHandler;
   }
@@ -107,7 +109,7 @@ public class RabbitMQConsumerOptions {
   public String getConsumerTag() {
     return consumerTag;
   }
-  
+
   /**
    * @param autoAck true if the server should consider messages
    *                acknowledged once delivered; false if the server should expect
@@ -139,7 +141,7 @@ public class RabbitMQConsumerOptions {
    * Set whether or not this is an exclusive consumer.
    * <p>
    * See <a href="https://www.rabbitmq.com/consumers.html#exclusivity">https://www.rabbitmq.com/consumers.html#exclusivity</a>.
-   * It is recommended that this be set to false, be sure you understand the implications and have read 
+   * It is recommended that this be set to false, be sure you understand the implications and have read
    * <a href="https://www.rabbitmq.com/consumers.html#single-active-consumer">https://www.rabbitmq.com/consumers.html#single-active-consumer</a> before setting to true.
    * <p>
    * @param exclusive true if this is an exclusive consumer.
@@ -147,7 +149,7 @@ public class RabbitMQConsumerOptions {
   public RabbitMQConsumerOptions setExclusive(boolean exclusive) {
     this.exclusive = exclusive;
     return this;
-  }  
+  }
 
   public long getReconnectInterval() {
     return reconnectInterval;
@@ -160,7 +162,7 @@ public class RabbitMQConsumerOptions {
 
   /**
    * Get custom arguments to be used in the call to basicConsume.
-   * 
+   *
    * @return
    */
   public Map<String, Object> getArguments() {
@@ -169,14 +171,14 @@ public class RabbitMQConsumerOptions {
 
   /**
    * Set custom arguments to be used in the call to basicConsume.
-   * 
-   * @param arguments 
+   *
+   * @param arguments
    */
   public RabbitMQConsumerOptions setArguments(Map<String, Object> arguments) {
     this.arguments = arguments;
     return this;
   }
-  
-  
-  
+
+
+
 }

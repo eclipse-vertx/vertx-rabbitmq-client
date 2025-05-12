@@ -11,15 +11,17 @@
 package io.vertx.rabbitmq;
 
 import io.vertx.codegen.annotations.DataObject;
+import io.vertx.codegen.json.annotations.JsonGen;
 import io.vertx.core.json.JsonObject;
 
 /**
  *
  * @author jtalbut
  */
-@DataObject(generateConverter = true)
+@DataObject
+@JsonGen(inheritConverter = true)
 public class RabbitMQConfirmation {
-  
+
   private long channelNumber;
   private long deliveryTag;
   private boolean multiple;
@@ -31,7 +33,7 @@ public class RabbitMQConfirmation {
     this.multiple = multiple;
     this.succeeded = succeeded;
   }
-  
+
   public RabbitMQConfirmation(JsonObject json) {
     RabbitMQConfirmationConverter.fromJson(json, this);
   }

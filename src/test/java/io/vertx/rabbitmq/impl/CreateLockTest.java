@@ -32,10 +32,10 @@ import org.slf4j.LoggerFactory;
  */
 @RunWith(VertxUnitRunner.class)
 public class CreateLockTest {
-  
+
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(CreateLockTest.class);
-  
+
   @Rule
   public RunTestOnContext testRunContext = new RunTestOnContext();
 
@@ -45,40 +45,38 @@ public class CreateLockTest {
     public TestClass() {
       constructCount.incrementAndGet();
     }
-    
+
     public void delay() {
       try {
         Thread.sleep(100);
       } catch(InterruptedException ex) {
       }
     }
-    
+
     public boolean test() {
       return true;
     }
-    
+
   }
-  
+
   @Test
   public void testCreateOnce(TestContext ctx) {
-    
+
     Async async = ctx.async();
-    
+
     CreateLock<TestClass> lock = new CreateLock<>(TestClass::test, null);
-    
-    List<Future> futures = new ArrayList<>();
+
+    List<Future<?>> futures = new ArrayList<>();
     for (int i = 0; i < 10; ++i) {
-      futures.add(testRunContext.vertx().<String>executeBlocking(promise -> {
-        lock.create(p -> {
-          TestClass result = new TestClass();
-          result.delay();
-          p.complete(result);
-        }, tc -> {
-          return Future.succeededFuture("Boo");
-        }).onComplete(promise);
+      futures.add(lock.create(p -> {
+        TestClass result = new TestClass();
+        result.delay();
+        p.complete(result);
+      }, tc -> {
+        return Future.succeededFuture("Boo");
       }));
     }
-    CompositeFuture cf = CompositeFuture.all(futures);
+    CompositeFuture cf = Future.all(futures);
     cf.onComplete(ar -> {
       if (ar.succeeded()) {
         ctx.assertEquals(1, TestClass.constructCount.get());
@@ -87,7 +85,7 @@ public class CreateLockTest {
         ctx.fail(ar.cause());
       }
     });
-    
+
   }
 
   @Test
@@ -97,5 +95,5 @@ public class CreateLockTest {
   @Test
   public void testGet() {
   }
-  
+
 }

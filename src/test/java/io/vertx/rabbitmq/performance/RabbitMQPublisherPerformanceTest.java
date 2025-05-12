@@ -16,9 +16,8 @@ import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ShutdownSignalException;
 import com.rabbitmq.client.impl.nio.NioParams;
-import io.vertx.core.Future;
+import io.vertx.core.Vertx;
 import io.vertx.ext.unit.TestContext;
-import io.vertx.ext.unit.junit.RunTestOnContext;
 import io.vertx.ext.unit.junit.Timeout;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import io.vertx.rabbitmq.RabbitMQBrokerProvider;
@@ -39,10 +38,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
+
+import org.junit.*;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,31 +51,40 @@ import org.testcontainers.containers.GenericContainer;
  */
 @RunWith(VertxUnitRunner.class)
 public class RabbitMQPublisherPerformanceTest {
-  
+
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQPublisherPerformanceTest.class);
-  
+
   private static final int WARMUP_ITERATIONS = 10 * 1000;
   private static final int ITERATIONS = 50 * 1000;
-  
+
   private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
-  
+
   @BeforeClass
   public static void startup() {
     CONTAINER.start();
   }
-  
+
   @AfterClass
   public static void shutdown() {
     CONTAINER.stop();
   }
-  
-  @Rule
-  public RunTestOnContext testRunContext = new RunTestOnContext();
-  
+
+  private Vertx vertx;
+
   @Rule
   public Timeout timeoutRule = Timeout.seconds(3600);
-  
+
+  @Before
+  public void before() {
+    vertx = Vertx.vertx();
+  }
+
+  @After
+  public void after() {
+    vertx.close().await();
+  }
+
   private static class Result {
     private final String name;
     private final long durationMs;
@@ -87,9 +93,9 @@ public class RabbitMQPublisherPerformanceTest {
       this.name = name;
       this.durationMs = durationMs;
     }
-    
+
   }
-  
+
   private final List<Result> results = new ArrayList();
 
   public RabbitMQOptions config() {
@@ -123,7 +129,7 @@ public class RabbitMQPublisherPerformanceTest {
     });
     return config;
   }
-  
+
   private static final class NullConsumer implements Consumer {
 
     @Override
@@ -149,9 +155,9 @@ public class RabbitMQPublisherPerformanceTest {
     @Override
     public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
     }
-    
+
   }
-  
+
   RabbitMQConnection connection;
   RabbitMQChannel consumerChannel;
   String consumerTag;
@@ -159,7 +165,7 @@ public class RabbitMQPublisherPerformanceTest {
   @Test
   public void testPerformance(TestContext testContext) {
     RabbitMQOptions config = config();
-    
+
     String exchange = this.getClass().getName() + "Exchange";
     String queue = this.getClass().getName() + "Queue";
 
@@ -172,85 +178,52 @@ public class RabbitMQPublisherPerformanceTest {
             , new Publisher(true)
             , new Publisher(false)
     );
-    
-    RabbitMQClient.connect(testRunContext.vertx(), config)
-            .compose(conn -> {
-              connection = conn;
-              return connection.createChannelBuilder()
-                      .withChannelOpenHandler(rawChannel -> {
-                        rawChannel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
-                        rawChannel.queueDeclare(queue, true, false, true, null);
-                        rawChannel.queueBind(queue, exchange, "", null);
-                      })
-                      // Consumer channel
-                      .openChannel();
-            })
-            .compose(channel -> {
-              this.consumerChannel = channel;
-              return channel.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new NullConsumer());
-            })
-            .compose(consumerTag -> {
-              this.consumerTag = consumerTag;
-              return init(config.getUri(), exchange, tests.iterator());
-            })
-            .compose(v -> runTests(tests.iterator()))
-            .compose(v -> {
-              logger.info("Cancelling consumer");
-              return consumerChannel.basicCancel(consumerTag);
-            })
-            .compose(v -> {
-              logger.info("Clsing connection");
-              return connection.close();
-            })
-            .onComplete(testContext.asyncAssertSuccess())
-            ;
-    
+
+    connection = RabbitMQClient.connect(vertx, config).await();
+    consumerChannel = connection.createChannelBuilder()
+      .withChannelOpenHandler(rawChannel -> {
+        rawChannel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
+        rawChannel.queueDeclare(queue, true, false, true, null);
+        rawChannel.queueBind(queue, exchange, "", null);
+      })
+      // Consumer channel
+      .openChannel().await();
+    consumerTag = consumerChannel.basicConsume(queue, true, getClass().getSimpleName(), false, false, null, new NullConsumer()).await();
+    init(config.getUri(), exchange, tests.iterator());
+    runTests(tests.iterator());
+    logger.info("Cancelling consumer");
+    consumerChannel.basicCancel(consumerTag).await();
+    logger.info("Clsing connection");
+    connection.close().await();
   }
-  
-  private Future<Void> init(String url, String exchange, Iterator<RabbitMQPublisherStresser> testIter) {
-    if (testIter.hasNext()) {
+
+  private void init(String url, String exchange, Iterator<RabbitMQPublisherStresser> testIter) {
+    while (testIter.hasNext()) {
       RabbitMQPublisherStresser test = testIter.next();
-      return test.init(connection, exchange)
-              .compose(v -> init(url, exchange, testIter))
-              ;
-    } else {
-      logger.info("Running performance tests with {} messages", ITERATIONS);
-      return Future.succeededFuture();
+      test.init(connection, exchange).await();
+      init(url, exchange, testIter);
+    }
+    logger.info("Running performance tests with {} messages", ITERATIONS);
+  }
+
+  private void runTests(Iterator<RabbitMQPublisherStresser> testIter) {
+    while (testIter.hasNext()) {
+      RabbitMQPublisherStresser test = testIter.next();
+      runTest(test);
     }
   }
-  
-  private Future<Void> runTests(Iterator<RabbitMQPublisherStresser> testIter) {
-    if (testIter.hasNext()) {
-      RabbitMQPublisherStresser test = testIter.next();
-      
-      return runTest(test)
-              .compose(v -> runTests(testIter))
-              ;
-    } else {
-      return Future.succeededFuture();
-    }
+
+  private void runTest(RabbitMQPublisherStresser test) {
+    test.runTest(WARMUP_ITERATIONS).await();
+    long start = System.currentTimeMillis();
+    test.runTest(ITERATIONS)
+      .compose(v2 -> {
+        long end = System.currentTimeMillis();
+        long duration = end - start;
+        results.add(new Result(test.getName(), duration));
+        double seconds = duration / 1000.0;
+        logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, (int) (ITERATIONS / seconds));
+        return test.shutdown();
+      }).await();
   }
-  
-  private Future<Void> runTest(RabbitMQPublisherStresser test) {
-    return testRunContext.vertx().executeBlocking(promise -> {
-      test.runTest(WARMUP_ITERATIONS)
-              .compose(v -> {
-                return testRunContext.vertx().<Void>executeBlocking(promise2 -> {
-                  long start = System.currentTimeMillis();
-                  test.runTest(ITERATIONS)
-                          .compose(v2 -> {
-                            long end = System.currentTimeMillis();
-                            long duration = end - start;
-                            results.add(new Result(test.getName(), duration));
-                            double seconds = duration / 1000.0;
-                            logger.info("Result: {}\t{}s\t{} M/s", test.getName(), seconds, (int) (ITERATIONS / seconds));
-                            return test.shutdown();
-                          })
-                          .onComplete(promise2);
-                }).onComplete(promise);
-              });
-    });
-   
-  }
-  
 }

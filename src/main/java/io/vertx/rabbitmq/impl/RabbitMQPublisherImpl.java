@@ -16,8 +16,8 @@ import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.internal.logging.Logger;
+import io.vertx.core.internal.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
@@ -39,9 +39,9 @@ import java.util.Objects;
  * @author jtalbut
  */
 public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
-  
+
   private static final Logger log = LoggerFactory.getLogger(RabbitMQPublisherImpl.class);
-  
+
   private final String exchange;
   private final boolean resendOnReconnect;
   private final RabbitMQMessageCodec<T> messageCodec;
@@ -52,7 +52,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
 
   private final Deque<MessageDetails> promises = new ArrayDeque<>();
   private final Deque<MessageDetails> resend = new ArrayDeque<>();
-      
+
   /**
    * POD holding the details of the promise to be completed and enough data to resend a message if required.
    * Note that equality is governed entirely by the channelId and deliveryTag.
@@ -114,16 +114,16 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
       return true;
     }
   }
-  
+
   public static <T> Future<RabbitMQPublisher<T>> create(
             RabbitMQChannelBuilder channelBuilder
           , RabbitMQMessageCodec<T> messageCodec
           , String exchange
           , RabbitMQPublisherOptions options) {
-    
+
     RabbitMQPublisherImpl<T> publisher = new RabbitMQPublisherImpl<>(channelBuilder, messageCodec, exchange, options);
-    return publisher.start(channelBuilder);    
-  }    
+    return publisher.start(channelBuilder);
+  }
 
   private Future<Void> performResends(RabbitMQChannel newChannel) {
     if (lastChannelId == null) {
@@ -146,14 +146,14 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
       return Future.succeededFuture();
     }
   }
-  
+
   public RabbitMQPublisherImpl(RabbitMQChannelBuilder channelBuilder, RabbitMQMessageCodec<T> messageCodec, String exchange, RabbitMQPublisherOptions options) {
     this.exchange = exchange;
     this.resendOnReconnect = options.isResendOnReconnect();
     this.messageCodec = messageCodec;
     this.codecManager = channelBuilder.getCodecManager();
   }
-  
+
   public Future<RabbitMQPublisher<T>> start(RabbitMQChannelBuilder channelBuilder) {
     return channelBuilder.withChannelRecoveryCallback(this::channelRecoveryCallback)
             .withConfirmHandler(confirmation -> handleConfirmation(confirmation))
@@ -171,7 +171,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   public RabbitMQChannel getChannel() {
     return channel;
   }
-  
+
   private Future<Void> doResendAsync(Promise<Void> promise) {
     MessageDetails md;
     synchronized(promises) {
@@ -193,11 +193,11 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
     }
     return promise.future();
   }
-  
+
   // This is called on a RabbitMQ thread and does not involve Vertx
   // The result is rather unpleasant, but is a necessary thing when faced with Java client recoveries.
   private void channelRecoveryCallback(Channel rawChannel) {
-    copyPromises(resend);    
+    copyPromises(resend);
     synchronized(promises) {
       log.debug("Connection recovered, resending " + resend.size() + " messages");
       for (MessageDetails md : resend) {
@@ -221,7 +221,7 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
       promises.clear();
     }
   }
-  
+
   private void handleConfirmation(RabbitMQConfirmation rawConfirmation) {
     log.debug("handleConfirmation(" + rawConfirmation.getChannelNumber() + ":" + rawConfirmation.getDeliveryTag() + ")");
     List<MessageDetails> toComplete = new ArrayList<>();
@@ -266,16 +266,16 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
   @Override
   public Future<Void> publish(String routingKey, AMQP.BasicProperties properties, T passedBody) {
     Promise<Void> promise = Promise.promise();
-    
+
     RabbitMQMessageCodec codec = (messageCodec == null) ? codecManager.lookupCodec(passedBody, null) : messageCodec;
     if ((codec.getContentEncoding() != null && !Objects.equals(codec.getContentEncoding(), properties.getContentEncoding()))
             || (codec.getContentType() != null && !Objects.equals(codec.getContentType(), properties.getContentType()))) {
       properties = RabbitMQChannelImpl.setTypeAndEncoding(properties, codec.getContentType(), codec.getContentEncoding());
     }
-    AMQP.BasicProperties finalProps = properties;    
-    
+    AMQP.BasicProperties finalProps = properties;
+
     byte[] preppedBody = codec.encodeToBytes(passedBody);
-    
+
     channel.basicPublish(new RabbitMQPublishOptions()
             .setDeliveryTagHandler(deliveryTag -> {
       synchronized(promises) {
@@ -304,13 +304,13 @@ public class RabbitMQPublisherImpl<T> implements RabbitMQPublisher<T> {
     }
     return Future.succeededFuture();
   }
-  
+
   @Override
   public Future<Void> cancel() {
     synchronized(promises) {
       promises.clear();
-    }    
+    }
     return channel.close();
   }
-  
+
 }
