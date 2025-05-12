@@ -16,9 +16,7 @@
 package io.vertx.rabbitmq;
 
 import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Return;
 import com.rabbitmq.client.ShutdownSignalException;
-import io.netty.util.Recycler.Handle;
 import io.vertx.codegen.annotations.Nullable;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -191,12 +189,14 @@ public class RabbitMQChannelBuilder {
     return this;
   }
 
+/*
   public RabbitMQChannelBuilder withReturnedMessageHandler(Handle<Return> returnHandler) {
     channelOpenHandlers.add(chann -> {
       chann.addReturnListener(ret -> returnHandler.recycle(ret));
     });
     return this;
   }
+*/
 
   /**
    * Set the QOS criteria to use on the channel.

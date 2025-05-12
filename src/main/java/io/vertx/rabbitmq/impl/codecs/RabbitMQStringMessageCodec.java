@@ -10,8 +10,9 @@
   */
 package io.vertx.rabbitmq.impl.codecs;
 
-import io.netty.util.CharsetUtil;
 import io.vertx.rabbitmq.RabbitMQMessageCodec;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  *
@@ -26,12 +27,12 @@ public class RabbitMQStringMessageCodec implements RabbitMQMessageCodec<String> 
     this.name = "string";
     this.contentType = "text/plain";
   }
-  
+
   public RabbitMQStringMessageCodec(String name, String contentType) {
     this.name = name;
     this.contentType = contentType;
   }
-  
+
   @Override
   public String codecName() {
     return name;
@@ -39,12 +40,12 @@ public class RabbitMQStringMessageCodec implements RabbitMQMessageCodec<String> 
 
   @Override
   public byte[] encodeToBytes(String value) {
-    return value.getBytes(CharsetUtil.UTF_8);
+    return value.getBytes(StandardCharsets.UTF_8);
   }
 
   @Override
   public String decodeFromBytes(byte[] data) {
-    return new String(data, CharsetUtil.UTF_8);
+    return new String(data, StandardCharsets.UTF_8);
   }
 
   @Override

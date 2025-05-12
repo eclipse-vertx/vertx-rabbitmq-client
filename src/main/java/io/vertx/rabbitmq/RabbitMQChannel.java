@@ -133,7 +133,7 @@ public interface RabbitMQChannel {
    * @param routingKey the routing key
    * @param mandatory true if the 'mandatory' flag is to be set If the mandatory flag is set to true the broker will return the
    * message to the publisher if it would be discarded (because there is no queue bound to the exchange). The message is returned
-   * via a registered "returned message handler" ({@link RabbitMQChannelBuilder#withReturnedMessageHandler(io.netty.util.Recycler.Handle)).
+   * via a registered "returned message handler" ({@link RabbitMQChannelBuilder#withReturnedMessageHandler).
    * @param props other properties for the message - routing headers etc
    * @param body the message body
    * @return A Future that will be completed when the message has been sent.
@@ -149,7 +149,7 @@ public interface RabbitMQChannel {
   Future<Void> basicNack(long channelNumber, long deliveryTag, boolean multiple, boolean requeue);
 
   Future<Void> waitForConfirms(long timeout);
-  
+
   <T> Future<T> onChannel(ChannelFunction<T> handler);
 
   RabbitMQManagementChannel getManagementChannel();
