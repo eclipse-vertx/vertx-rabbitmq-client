@@ -23,6 +23,9 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.ContextInternal;
+import io.vertx.core.impl.VertxInternal;
+import io.vertx.core.impl.future.PromiseInternal;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.net.JksOptions;
@@ -49,32 +52,32 @@ import javax.net.ssl.TrustManagerFactory;
  * @author jtalbut
  */
 public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListener {
-  
+
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQConnectionImpl.class);
-  
+
   private final Vertx vertx;
   private final Context context;
   private final RabbitMQOptions config;
   private String connectionName;
-  
+
   private boolean connectedAtLeastOnce;
   private boolean established;
   private final Object connectingPromiseLock = new Object();
   private volatile Future<Connection> connectingFuture;
   private final Object connectionLock = new Object();
-  private volatile Connection connection;  
+  private volatile Connection connection;
 
   private int reconnectCount;
   private long lastConnectedInstance = -1;
-  
+
   private final AtomicLong connectCount = new AtomicLong();
   private volatile boolean closed;
-  
+
   private String connectionTarget;
-  
+
   public RabbitMQConnectionImpl(Vertx vertx, RabbitMQOptions config) {
     this.vertx = vertx;
-    this.context = vertx.getOrCreateContext();    
+    this.context = vertx.getOrCreateContext();
     this.config = new RabbitMQOptions(config);
   }
 
@@ -86,7 +89,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   public long getConnectionInstance() {
     return connectCount.get();
   }
-  
+
   public boolean isEstablished() {
     return established;
   }
@@ -99,18 +102,18 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   public String getConnectionName() {
     return connectionName;
   }
-  
+
   private Connection rawConnect() throws Exception {
     List<Address> addresses = null;
     ConnectionFactory cf = new ConnectionFactory();
     String uriString = config.getUri();
-    
+
     String username = config.getUser();
     String password = config.getPassword();
     String vhost = config.getVirtualHost();
-    
-    // Use uri if set, otherwise support individual connection parameters    
-    if (uriString != null) {      
+
+    // Use uri if set, otherwise support individual connection parameters
+    if (uriString != null) {
       logger.debug("Attempting connection to " + uriString);
       URI uri = null;
       try {
@@ -122,7 +125,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
         configureTlsProtocol(cf);
       }
       cf.setUri(uri);
-        
+
       // Override the user/pass/vhost values, but only if they are set in the URI and are NOT set in the config
       String rawUserInfo = uri.getRawUserInfo();
       if (rawUserInfo != null && !rawUserInfo.isEmpty()) {
@@ -134,7 +137,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
           password = URLDecoder.decode(parts[1], "UTF-8");
         }
       }
-      String rawPath = uri.getRawPath();      
+      String rawPath = uri.getRawPath();
       if (rawPath != null && !rawPath.isEmpty() && RabbitMQOptions.DEFAULT_VIRTUAL_HOST.equals(vhost)) {
         if (rawPath.startsWith("/")) {
           rawPath = rawPath.substring(1);
@@ -182,7 +185,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
               + URLEncoder.encode(cf.getVirtualHost(), "UTF-8");
     }
     logger.info((connectCount.get() > 0 ? "Rec" : "C") + "onnecting to " + connectionTarget);
-    
+
     cf.setConnectionTimeout(config.getConnectionTimeout());
     cf.setShutdownTimeout(config.getShutdownTimeout());
     cf.setWorkPoolTimeout(config.getWorkPoolTimeout());
@@ -193,7 +196,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     cf.setNetworkRecoveryInterval(config.getNetworkRecoveryInterval());
     cf.setAutomaticRecoveryEnabled(config.isAutomaticRecoveryEnabled());
     if (config.getTopologyRecoveryEnabled() == null) {
-      cf.setTopologyRecoveryEnabled(config.isAutomaticRecoveryEnabled());      
+      cf.setTopologyRecoveryEnabled(config.isAutomaticRecoveryEnabled());
     } else {
       cf.setTopologyRecoveryEnabled(config.getTopologyRecoveryEnabled());
     }
@@ -250,22 +253,22 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     }
     if (config.getSslContextFactory() != null) {
       cf.setSslContextFactory(config.getSslContextFactory());
-    }    
+    }
     if (config.getThreadFactory() != null) {
       cf.setThreadFactory(config.getThreadFactory());
-    }    
+    }
     if (config.getTopologyRecoveryExecutor() != null) {
       cf.setTopologyRecoveryExecutor(config.getTopologyRecoveryExecutor());
-    }    
+    }
     if (config.getTopologyRecoveryFilter() != null) {
       cf.setTopologyRecoveryFilter(config.getTopologyRecoveryFilter());
-    }    
+    }
     if (config.getTopologyRecoveryRetryHandler() != null) {
       cf.setTopologyRecoveryRetryHandler(config.getTopologyRecoveryRetryHandler());
-    }    
+    }
     if (config.getTrafficListener() != null) {
       cf.setTrafficListener(config.getTrafficListener());
-    }    
+    }
 
     connectionName = config.getConnectionName();
     if (connectionName == null || connectionName.isEmpty()) {
@@ -274,7 +277,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     Connection conn = addresses == null ? cf.newConnection(connectionName) : cf.newConnection(addresses, connectionName);
     lastConnectedInstance = connectCount.incrementAndGet();
     conn.setId(Long.toString(lastConnectedInstance));
-    logger.info("Established connection to " + connectionTarget);      
+    logger.info("Established connection to " + connectionTarget);
     conn.addShutdownListener(this);
     conn.addBlockedListener(new BlockedListener() {
       @Override
@@ -287,16 +290,16 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
         logger.info("Unblocked");
       }
     });
-    
+
     return conn;
   }
-  
+
   private void configureTlsProtocol(ConnectionFactory cf) throws Exception {
     if (config.isTrustAll()) {
-      cf.useSslProtocol();      
+      cf.useSslProtocol();
     } else {
       String secureTransportProtocol = config.getSecureTransportProtocol();
-      
+
       SSLContext sslContext = SSLContext.getInstance(secureTransportProtocol);
       JksOptions kso = config.getKeyStoreOptions();
       KeyManager km[] = null;
@@ -304,7 +307,7 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
         KeyManagerFactory kmf = kso.getKeyManagerFactory(vertx);
         if (kmf != null) {
           km = kmf.getKeyManagers();
-        }        
+        }
       }
       JksOptions tso = config.getTrustStoreOptions();
       TrustManager tm[] = null;
@@ -314,21 +317,21 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
           tm = tmf.getTrustManagers();
         }
       }
-      sslContext.init(km, tm, null);      
+      sslContext.init(km, tm, null);
       cf.useSslProtocol(sslContext);
       if (config.isTlsHostnameVerification()) {
         cf.enableHostnameVerification();
       }
     }
   }
-  
+
   /**
    * Return a derived named for the connection that should be sufficient to identify it.
    * <p>
    * Connection names are very useful for broker adminstrators and should always be provided.
    * If nothing else can be done this method should return something useful.
    * <p>
-   * @return 
+   * @return
    */
   private String fabricateConnectionName() {
     try {
@@ -342,123 +345,113 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
   public void shutdownCompleted(ShutdownSignalException cause) {
     logger.info("Connection " + ((Connection) cause.getReference()).getId() + " Shutdown: " + cause.getMessage());
   }
-  
+
   protected boolean shouldRetryConnection() {
     if (closed) {
       logger.debug("Not retrying connection because close has been called");
-      return false;      
+      return false;
     }
     if (config.getReconnectInterval() <= 0) {
       logger.debug("Not retrying connection because reconnect internal (" + config.getReconnectInterval() + ") <= 0");
-      return false;      
+      return false;
     }
     if (connectedAtLeastOnce) {
       if (config.getReconnectAttempts() < 0) {
-        logger.debug("Retrying because reconnect limit (" + config.getReconnectAttempts() + ") < 0"); 
+        logger.debug("Retrying because reconnect limit (" + config.getReconnectAttempts() + ") < 0");
         ++reconnectCount;
         return true;
       } else if (config.getReconnectAttempts() > reconnectCount) {
-        logger.debug("Retrying because reconnect count (" + reconnectCount + ") < limit (" + config.getReconnectAttempts() + ")"); 
+        logger.debug("Retrying because reconnect count (" + reconnectCount + ") < limit (" + config.getReconnectAttempts() + ")");
         ++reconnectCount;
         return true;
       } else {
-        logger.debug("Not retrying connection because reconnect count (" + reconnectCount + ") >= limit (" + config.getReconnectAttempts() + ")"); 
+        logger.debug("Not retrying connection because reconnect count (" + reconnectCount + ") >= limit (" + config.getReconnectAttempts() + ")");
         return false;
       }
     } else {
       if (config.getInitialConnectAttempts() < 0) {
-        logger.debug("Retrying because initial reconnect limit (" + config.getInitialConnectAttempts() + ") < 0"); 
+        logger.debug("Retrying because initial reconnect limit (" + config.getInitialConnectAttempts() + ") < 0");
         ++reconnectCount;
         return true;
       } else if (config.getInitialConnectAttempts() > reconnectCount) {
-        logger.debug("Retrying because reconnect count (" + reconnectCount + ") < initial limit (" + config.getInitialConnectAttempts() + ")"); 
+        logger.debug("Retrying because reconnect count (" + reconnectCount + ") < initial limit (" + config.getInitialConnectAttempts() + ")");
         ++reconnectCount;
         return true;
       } else {
-        logger.debug("Not retrying connection because reconnect count (" + reconnectCount + ") >= initial limit (" + config.getInitialConnectAttempts() + ")"); 
+        logger.debug("Not retrying connection because reconnect count (" + reconnectCount + ") >= initial limit (" + config.getInitialConnectAttempts() + ")");
         return false;
       }
-    }        
-  }
-  
-  public Future<RabbitMQConnection> connect() {
-    return vertx.<Connection>executeBlocking(promise -> {
-      connectBlocking(promise);
-    }).map(c -> this);    
+    }
   }
 
-  private Future<Connection> connectBlocking(Promise<Connection> promise) {
-    try {
+  public Future<RabbitMQConnection> connect() {
+    ContextInternal ctx = ((VertxInternal) vertx).getOrCreateContext();
+    PromiseInternal<Connection> promise = ctx.promise();
+    connectBlocking(promise);
+    return promise.map(this);
+  }
+
+  private void connectBlocking(Promise<Connection> promise) {
+    vertx.executeBlocking(() -> {
       synchronized(connectionLock) {
         if (connection == null || !connection.isOpen()) {
           connection = rawConnect();
           connectedAtLeastOnce = true;
         }
-        promise.complete(connection);
+        return connection;
       }
-    } catch(Throwable ex) {
-      logger.error("Failed to create connection to " + connectionTarget + ": ", ex);
-      if (shouldRetryConnection()) {
-        vertx.setTimer(config.getReconnectInterval(), time -> {
-          vertx.executeBlocking(p -> {
-            connectBlocking(promise)
-                    .onComplete(ar -> {
-                      if (ar.succeeded()) {
-                        p.complete();
-                      } else {
-                        p.fail(ar.cause());
-                      }
-                    });
-          });
-        });
+    }).onComplete(ar -> {
+      if (ar.succeeded()) {
+        promise.complete(ar.result());
       } else {
-        promise.fail(ex);
+        logger.error("Failed to create connection to " + connectionTarget + ": ", ar.cause());
+        if (shouldRetryConnection()) {
+          vertx.setTimer(config.getReconnectInterval(), time -> {
+            connectBlocking(promise);
+          });
+        } else {
+          promise.fail(ar.cause());
+        }
       }
-    }
-    return promise.future();
-  }  
-  
+    });
+}
+
   Future<Channel> openChannel(long lastInstance) {
-    synchronized(connectingPromiseLock) {
+    synchronized (connectingPromiseLock) {
       logger.debug("ConnectionFuture: " + connectingFuture + ", lastInstance: " + lastInstance + ", connectCount: " + connectCount.get() + ", closed: " + closed);
       if (((connectingFuture == null) || (lastInstance != this.connectCount.get())) && !closed) {
-        synchronized(connectionLock) {       
+        synchronized (connectionLock) {
           if (lastConnectedInstance != connectCount.get()) {
             reconnectCount = 0;
           }
         }
         Promise<Connection> connectingPromise = Promise.promise();
         connectingFuture = connectingPromise.future();
-        context.executeBlocking(execPromise -> connectBlocking(connectingPromise).onComplete(ar -> {
-          if (ar.succeeded()) {
-            execPromise.complete();
-          } else {
-            execPromise.fail(ar.cause());
-          }
-        }));
+        connectBlocking(connectingPromise);
       }
       return connectingFuture
-              .compose(conn -> {
-                return context.executeBlocking(promise -> {
-                  try {                    
-                    promise.complete(conn.createChannel());
-                  } catch(AlreadyClosedException | IOException ex) {
-                    logger.error("Failed to create channel: ", ex);
-                    if (shouldRetryConnection()) {
-                      synchronized(connectingPromiseLock) {
-                        try {
-                          conn.abort();
-                        } catch(Throwable ex2) {
-                          logger.warn("Failed to abort existing connect (should be harmless): ", ex);
-                        }
-                        connectingFuture = null;
-                      }
-                      openChannel(lastInstance).onComplete(promise);
+        .compose(conn -> context
+          .executeBlocking(() -> conn.createChannel())
+          .transform(ar -> {
+            if (ar.failed()) {
+              Throwable cause = ar.cause();
+              if (cause instanceof AlreadyClosedException || cause instanceof IOException) {
+                logger.error("Failed to create channel: ", cause);
+                if (shouldRetryConnection()) {
+                  synchronized (connectingPromiseLock) {
+                    try {
+                      conn.abort();
+                    } catch (Throwable ex2) {
+                      logger.warn("Failed to abort existing connect (should be harmless): ", cause);
                     }
-                    promise.fail(ex);
+                    connectingFuture = null;
                   }
-                });
-              });
+                  return openChannel(lastInstance);
+                }
+              }
+            }
+            return (Future<Channel>) ar;
+          }));
     }
   }
 
@@ -479,13 +472,9 @@ public class RabbitMQConnectionImpl implements RabbitMQConnection, ShutdownListe
     if (conn == null) {
       return Future.succeededFuture();
     }
-    return context.executeBlocking(promise -> {
-      try {        
-        conn.close(closeCode, closeMessage, timeout);
-        promise.complete();
-      } catch(Throwable ex) {
-        promise.fail(ex);
-      }
+    return context.executeBlocking(() -> {
+      conn.close(closeCode, closeMessage, timeout);
+      return null;
     });
   }
 

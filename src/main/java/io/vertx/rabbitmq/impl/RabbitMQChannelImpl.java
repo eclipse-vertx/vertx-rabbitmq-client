@@ -36,21 +36,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeoutException;
 
 /**
  *
  * @author jtalbut
  */
 public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementChannel, ShutdownListener {
-  
+
   private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelImpl.class);
-  
+
   private final RabbitMQConnectionImpl connection;
   private final Context context;
   private final RabbitMQCodecManager codecManager;
-  
+
   private volatile int channelNumber;
-  
+
   private final List<Handler<Channel>> channelRecoveryCallbacks;
   private final List<Handler<ShutdownSignalException>> shutdownHandlers;
   private final Object publishLock = new Object();
@@ -59,7 +60,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
   private volatile boolean closed;
   private volatile boolean confirmSelected;
   private final CreateLock<Channel> createLock;
-  
+
   public RabbitMQChannelImpl(RabbitMQChannelBuilder builder) {
     this.connection = builder.getConnection();
     this.retries = connection.getConfiguredReconnectAttempts();
@@ -78,7 +79,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
   public RabbitMQManagementChannel getManagementChannel() {
     return this;
   }
-  
+
   @Override
   public Future<Void> confirmSelect() {
 
@@ -109,12 +110,12 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
   public String getChannelId() {
     return connection.getConnectionName() + ":" + Long.toString(knownConnectionInstance) + ":" + channelNumber;
   }
-  
+
   public Future<RabbitMQChannel> connect() {
     return onChannel(channel -> this);
   }
-  
-  private void connect(Promise<Channel> promise) {    
+
+  private void connect(Promise<Channel> promise) {
     connection.openChannel(this.knownConnectionInstance)
             .onComplete(ar -> {
                     if (ar.failed()) {
@@ -124,7 +125,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
                       Channel channel = ar.result();
                       this.channelNumber = channel.getChannelNumber();
                       channel.addShutdownListener(this);
-                      
+
                       if (channel instanceof Recoverable) {
                         Recoverable recoverable = (Recoverable) channel;
                         recoverable.addRecoveryListener(new RecoveryListener() {
@@ -134,7 +135,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
                             List<Handler<Channel>> callbacks;
                             synchronized(channelRecoveryCallbacks) {
                               callbacks = new ArrayList<>(channelRecoveryCallbacks);
-                            } 
+                            }
                             for (Handler<Channel> handler : callbacks) {
                               handler.handle(channel);
                             }
@@ -168,18 +169,15 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
     }
     return createLock.create(promise -> {
       connect(promise);
-    }, channel -> {
-      return context.executeBlocking(promise -> {
-        try {
-          T t = handler.handle(channel);
-          promise.complete(t);
-        } catch (Throwable t) {
-          promise.fail(t);
-        }
-      });
-    });
+    }, channel -> context.executeBlocking(() -> {
+      try {
+        return handler.handle(channel);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }));
   }
-  
+
   @Override
   public Future<Void> abort(int closeCode, String closeMessage) {
     return onChannel(chann -> {
@@ -192,8 +190,8 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
     return onChannel(channel -> {
       return channel.addConfirmListener(ackCallback, nackCallback);
     }).mapEmpty();
-  }  
-  
+  }
+
   @Override
   public Future<Void> basicAck(long channelNumber, long deliveryTag, boolean multiple) {
     return onChannel(channel -> {
@@ -201,9 +199,9 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
         channel.basicAck(deliveryTag, multiple);
       }
       return null;
-    });    
+    });
   }
-  
+
   @Override
   public Future<Void> basicNack(long channelNumber, long deliveryTag, boolean multiple, boolean requeue) {
     return onChannel(channel -> {
@@ -211,9 +209,9 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
         channel.basicNack(deliveryTag, multiple, requeue);
       }
       return null;
-    });    
+    });
   }
-  
+
   @Override
   public Future<String> basicConsume(String queue, boolean autoAck, String consumerTag, boolean noLocal, boolean exclusive, Map<String, Object> arguments, Consumer consumer) {
     return onChannel(channel -> {
@@ -228,7 +226,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
       return null;
     });
   }
-    
+
   public static AMQP.BasicProperties setTypeAndEncoding(AMQP.BasicProperties props, String type, String encoding) {
     return new AMQP.BasicProperties.Builder()
             .appId(props.getAppId())
@@ -247,7 +245,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
             .userId(props.getUserId())
             .build();
   }
-  
+
   @Override
   public Future<Void> basicPublish(RabbitMQPublishOptions options, String exchange, String routingKey, boolean mandatory, AMQP.BasicProperties props, Object body) {
     /**
@@ -256,7 +254,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
      * 1. The RabbitMQClient is using NIO.
      * 2. Synchronous confirms are not enabled.
      * the first of which is mandated by this client and the second by checking confirmSelected.
-     * 
+     *
      * Synchronizing is necessary because this introduces a race condition in the generation of the delivery tag.
      */
     String codecName = options == null ? null : options.getCodec();
@@ -280,14 +278,14 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
     } catch(IOException ex) {
       log.warn("Synchronous send of basicPublish(" + exchange + ", " + routingKey + ", " + mandatory + ": ", ex);
     }
-    
+
     boolean waitForConfirms = options != null && options.isWaitForConfirm();
     if (waitForConfirms) {
       if (!confirmSelected) {
         return Future.failedFuture(new IllegalStateException("Must call confirmSelect before basicPublishWithConfirm"));
       }
-    }    
-      
+    }
+
     AMQP.BasicProperties finalProps = props;
     return onChannel(channel -> {
       synchronized(publishLock) {
@@ -302,7 +300,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
       }
       return null;
     }).mapEmpty();
-    
+
   }
 
   @Override
@@ -351,7 +349,7 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
   public Future<Void> close() {
     return close(AMQP.REPLY_SUCCESS, "OK");
   }
-    
+
   @Override
   public Future<Void> close(int closeCode, String closeMessage) {
     Channel chann = createLock.get();
@@ -359,14 +357,14 @@ public class RabbitMQChannelImpl implements RabbitMQChannel, RabbitMQManagementC
     if (chann == null || !chann.isOpen()) {
       return Future.succeededFuture();
     }
-    return context.executeBlocking(promise -> {
+    return context.executeBlocking(() -> {
       try {
         chann.close(closeCode, closeMessage);
-        promise.complete();
-      } catch (Throwable t) {
-        promise.fail(t);
+        return null;
+      } catch (Exception e) {
+        throw new RuntimeException(e);
       }
     });
   }
-  
+
 }
