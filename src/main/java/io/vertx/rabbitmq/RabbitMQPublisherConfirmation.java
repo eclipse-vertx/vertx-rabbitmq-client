@@ -11,13 +11,15 @@
 package io.vertx.rabbitmq;
 
 import io.vertx.codegen.annotations.DataObject;
+import io.vertx.codegen.json.annotations.JsonGen;
 import io.vertx.core.json.JsonObject;
 
 /**
  *
  * @author jtalbut
  */
-@DataObject(generateConverter = true)
+@DataObject
+@JsonGen(inheritConverter = true)
 public class RabbitMQPublisherConfirmation {
 
   private String messageId;
@@ -26,7 +28,7 @@ public class RabbitMQPublisherConfirmation {
   public RabbitMQPublisherConfirmation(JsonObject json) {
     RabbitMQPublisherConfirmationConverter.fromJson(json, this);
   }
-  
+
   public RabbitMQPublisherConfirmation(String messageId, boolean succeeded) {
     this.messageId = messageId;
     this.succeeded = succeeded;
@@ -37,7 +39,7 @@ public class RabbitMQPublisherConfirmation {
     RabbitMQPublisherConfirmationConverter.toJson(this, json);
     return json;
   }
-  
+
   public String getMessageId() {
     return messageId;
   }

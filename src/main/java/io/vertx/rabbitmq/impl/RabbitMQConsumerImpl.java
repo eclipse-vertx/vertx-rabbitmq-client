@@ -23,8 +23,8 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.internal.logging.Logger;
+import io.vertx.core.internal.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQChannel;
 import io.vertx.rabbitmq.RabbitMQChannelBuilder;
 import io.vertx.rabbitmq.RabbitMQConsumer;
@@ -47,7 +47,7 @@ import java.util.function.Supplier;
 public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
 
   private static final Logger log = LoggerFactory.getLogger(RabbitMQConsumerImpl.class);
-  
+
   private final RabbitMQConnectionImpl connection;
   private final Handler<RabbitMQConsumer> consumerOkHandler;
   private final Handler<RabbitMQConsumer> cancelOkHandler;
@@ -59,11 +59,11 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
   private final boolean exclusive;
   private final Map<String, Object> arguments;
   private final Supplier<String> queueNameSupplier;
-  
+
   private final RabbitMQMessageCodec<T> messageCodec;
 
   private final BiFunction<RabbitMQConsumer, RabbitMQMessage<T>, Future<Void>> handler;
-  
+
   private RabbitMQChannel channel;
   private String consumerTag;
   private boolean cancelled;
@@ -84,7 +84,7 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
             , options
             , handler
     );
-    return consumer.start(channelBuilder);        
+    return consumer.start(channelBuilder);
   }
 
   public RabbitMQConsumerImpl(RabbitMQChannelBuilder channelBuilder
@@ -109,7 +109,7 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
     this.handler = handler;
     this.vertxContext = connection.getVertx().getOrCreateContext();
   }
-  
+
   public Future<RabbitMQConsumer> start(RabbitMQChannelBuilder channelBuilder) {
     return channelBuilder
             .openChannel()
@@ -120,7 +120,7 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
             })
             .map(this);
   }
-  
+
   @Override
   public RabbitMQChannel getChannel() {
     return channel;
@@ -136,7 +136,7 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
     this.cancelled = true;
     return channel.basicCancel(consumerTag);
   }
-  
+
   @Override
   public void handleConsumeOk(String consumerTag) {
     this.consumerTag = consumerTag;
@@ -179,22 +179,22 @@ public class RabbitMQConsumerImpl<T> implements RabbitMQConsumer, Consumer {
   @Override
   public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
     CompletableFuture<Void> cf = new CompletableFuture<>();
-    
+
     T value = messageCodec.decodeFromBytes(body);
     RabbitMQMessage<T> msg = new RabbitMQMessageImpl<>(channel, channel.getChannelNumber(), value, consumerTag, envelope, properties);
-    
+
     vertxContext.runOnContext(v -> {
       handler.apply(this, msg)
               .andThen(ar -> cf.complete(null));
     });
-    
+
     try {
       cf.get();
-    } catch (Throwable ex) {      
+    } catch (Throwable ex) {
     }
-    
-  }    
-  
+
+  }
+
   private Future<Void> consume(Promise<Void> promise) {
     String queueName = queueNameSupplier.get();
     channel.basicConsume(queueName, false, channel.getChannelId(), false, exclusive, arguments, this)

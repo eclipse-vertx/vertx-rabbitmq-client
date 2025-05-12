@@ -34,7 +34,7 @@ public class FireAndForget implements RabbitMQPublisherStresser {
 
   public FireAndForget() {
   }
-  
+
   @Override
   public String getName() {
     return "Fire and forget (no message confirmation)";
@@ -63,12 +63,12 @@ public class FireAndForget implements RabbitMQPublisherStresser {
   public Future<Void> runTest(long iterations) {
     counter.set(iterations);
     long iter;
-    List<Future> futures = new ArrayList<>();
+    List<Future<?>> futures = new ArrayList<>();
     while((iter = counter.decrementAndGet()) > 0) {
-      Future pubFuture = channel.basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new AMQP.BasicProperties(), Long.toString(iter).getBytes());
+      Future<?> pubFuture = channel.basicPublish(new RabbitMQPublishOptions(), exchange, "", true, new AMQP.BasicProperties(), Long.toString(iter).getBytes());
       futures.add(pubFuture);
     }
-    return CompositeFuture.all(futures).mapEmpty();
+    return Future.all(futures).mapEmpty();
   }
-  
+
 }

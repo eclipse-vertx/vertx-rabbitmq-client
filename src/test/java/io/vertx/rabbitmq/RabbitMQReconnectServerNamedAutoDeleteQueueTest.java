@@ -43,15 +43,15 @@ import org.testcontainers.containers.GenericContainer;
  */
 @RunWith(VertxUnitRunner.class)
 public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
-  
+
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQClientReconnectTest.class);
 
   /**
    * This test verifies that the RabbitMQ Java client reconnection logic works as long as the vertx reconnect attempts is set to zero.
    *
-   * The change that makes this work is in the basicConsumer, where the shutdown handler is only set if retries > 0. 
-   * Without that change the vertx client shutdown handler is called, 
+   * The change that makes this work is in the basicConsumer, where the shutdown handler is only set if retries > 0.
+   * Without that change the vertx client shutdown handler is called,
    * interrupting the java client reconnection logic, even though the vertx reconnection won't work because retries is zero.
    *
    */
@@ -62,22 +62,22 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
 
   private static final GenericContainer CONTAINER = RabbitMQBrokerProvider.getRabbitMqContainer();
   private Proxy proxy;
-  
+
   private final Vertx vertx;
   private RabbitMQConnection connection;
 
   private final Set<Long> receivedMessages = new HashSet<>();
-  
+
   private final Promise<Void> firstMessagesReceived = Promise.promise();
   private final AtomicBoolean hasShutdown = new AtomicBoolean(false);
   private final Promise<Void> messageSentAfterShutdown = Promise.promise();
   private final Promise<Long> allMessagesSent = Promise.promise();
   private final Promise<Long> messagesReceivedAfterReconnect = Promise.promise();
-  
+
   private RabbitMQPublisher<Long> publisher;
   private RabbitMQConsumer consumer;
   private final AtomicReference<String> queueName = new AtomicReference<>();
-  
+
   public RabbitMQReconnectServerNamedAutoDeleteQueueTest() throws IOException {
     logger.info("Constructing");
     this.vertx = Vertx.vertx(new VertxOptions().setWorkerPoolSize(6));
@@ -87,7 +87,7 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
   public static void startup() {
     CONTAINER.start();
   }
-  
+
   @AfterClass
   public static void shutdown() {
     CONTAINER.stop();
@@ -108,12 +108,12 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     options.setReconnectAttempts(100);
     return options;
   }
-  
+
   @Before
   public void setup(TestContext testContext) throws Exception {
     this.proxy = new Proxy(vertx, this.CONTAINER.getMappedPort(5672));
     this.proxy.startProxy();
-    
+
     RabbitMQClient.connect(vertx, getRabbitMQOptions())
             .onSuccess(conn -> {
               this.connection = conn;
@@ -129,7 +129,7 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
   @Test(timeout = 1 * 60 * 1000L)
   public void testRecoverConnectionOutage(TestContext ctx) throws Exception {
     Async async = ctx.async();
-    
+
     createConsumer()
             .compose(v -> createPublisher())
             .compose(v -> sendMessages())
@@ -163,12 +163,12 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
             .mapEmpty()
             ;
   }
-  
+
   private Future<Void> sendMessages() {
     AtomicLong counter = new AtomicLong();
     AtomicLong postShutdownCount = new AtomicLong(20);
     AtomicLong timerId = new AtomicLong();
-    
+
     /*
     Send a message every second, with the message being a strictly increasing integer.
     After sending the first message when 'hasShutdown' is set complete the messageSentAfterShutdown to notify the main test.
@@ -188,8 +188,8 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     }));
     return Future.succeededFuture();
   }
-  
-  
+
+
   private Future<Void> messageHandler(RabbitMQConsumer consumer, RabbitMQMessage<Long> message) {
     logger.debug("Got message {} from {}", message.body(), queueName);
     if (messageSentAfterShutdown.future().succeeded()) {
@@ -199,7 +199,7 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
     firstMessagesReceived.tryComplete();
     return message.basicAck();
   }
-  
+
   private Future<Void> createConsumer() {
     return connection.createChannelBuilder()
             .withChannelOpenHandler(rawChannel -> {
@@ -211,24 +211,24 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
             .withChannelShutdownHandler(sse -> {
               hasShutdown.set(true);
             })
-            .createConsumer(new RabbitMQLongMessageCodec(), null, () -> queueName.get(), new RabbitMQConsumerOptions(), this::messageHandler)            
+            .createConsumer(new RabbitMQLongMessageCodec(), null, () -> queueName.get(), new RabbitMQConsumerOptions(), this::messageHandler)
             .onSuccess(con -> consumer = con)
             .mapEmpty()
             ;
   }
-  
+
 
   private Future<Void> breakConnection() {
-    return vertx.executeBlocking(promise -> {
+    return vertx.executeBlocking(() -> {
       logger.info("Blocking proxy");
       proxy.stopProxy();
       logger.info("Blocked proxy");
-      promise.complete();      
+      return null;
     });
   }
-  
+
   private Future<Void> reestablishConnection() {
-    return vertx.executeBlocking(promise -> {
+    return vertx.executeBlocking(() -> {
       logger.info("Unblocking proxy");
       try {
         proxy.startProxy();
@@ -236,8 +236,8 @@ public class RabbitMQReconnectServerNamedAutoDeleteQueueTest {
         logger.error("Failed to restart proxy");
       }
       logger.info("Unblocked proxy");
-      promise.complete();      
+      return null;
     });
   }
-    
+
 }

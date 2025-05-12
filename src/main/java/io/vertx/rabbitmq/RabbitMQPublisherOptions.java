@@ -11,6 +11,7 @@
 package io.vertx.rabbitmq;
 
 import io.vertx.codegen.annotations.DataObject;
+import io.vertx.codegen.json.annotations.JsonGen;
 import io.vertx.core.json.JsonObject;
 
 
@@ -19,7 +20,8 @@ import io.vertx.core.json.JsonObject;
  *
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
-@DataObject(generateConverter = true)
+@DataObject
+@JsonGen(inheritConverter = true)
 public class RabbitMQPublisherOptions {
 
   /**
@@ -28,7 +30,7 @@ public class RabbitMQPublisherOptions {
   public static final boolean DEFAULT_RESEND_ON_RECONNECT = false;
 
   private boolean resendOnReconnect = DEFAULT_RESEND_ON_RECONNECT;
-  
+
   public RabbitMQPublisherOptions() {
   }
 

@@ -11,6 +11,7 @@
 package io.vertx.rabbitmq;
 
 import io.vertx.codegen.annotations.DataObject;
+import io.vertx.codegen.json.annotations.JsonGen;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonObject;
 
@@ -18,9 +19,10 @@ import io.vertx.core.json.JsonObject;
  *
  * @author jtalbut
  */
-@DataObject(generateConverter = true, inheritConverter = true)
+@DataObject
+@JsonGen(inheritConverter = true)
 public class RabbitMQPublishOptions {
-  
+
   /**
    * The default MessageCodec = {@code null}.
    */
@@ -30,11 +32,11 @@ public class RabbitMQPublishOptions {
    * The default waitForConfirm = {@code false}.
    */
   public static final boolean DEFAULT_WAIT_FOR_CONFIRM = false;
-  
+
   private String codec;
   private boolean waitForConfirm;
   private Handler<Long> deliveryTagHandler;
-  
+
   /**
    * Default constructor.
    */
@@ -67,7 +69,7 @@ public class RabbitMQPublishOptions {
   private void init() {
     this.codec = DEFAULT_CODEC;
     this.waitForConfirm = DEFAULT_WAIT_FOR_CONFIRM;
-  }  
+  }
 
   /**
    * Convert this object to JSON.
@@ -78,7 +80,7 @@ public class RabbitMQPublishOptions {
     RabbitMQPublishOptionsConverter.toJson(this, json);
     return json;
   }
-  
+
   /**
    * Get the MessageCodec to use for publishing this message.
    * @return the MessageCodec to use for publishing this message.
@@ -133,6 +135,6 @@ public class RabbitMQPublishOptions {
     this.deliveryTagHandler = deliveryTagHandler;
     return this;
   }
-  
-  
+
+
 }

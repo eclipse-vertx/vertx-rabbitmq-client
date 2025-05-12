@@ -34,22 +34,22 @@ import org.slf4j.LoggerFactory;
 public class Publisher implements RabbitMQPublisherStresser {
 
   private static final Logger log = LoggerFactory.getLogger(Publisher.class);
-  
+
   private RabbitMQConnection connection;
   private RabbitMQPublisher publisher;
   private final boolean withRetries;
-  
+
   private String exchange;
 
   public Publisher(boolean withRetries) {
     this.withRetries = withRetries;
   }
-  
+
   @Override
   public String getName() {
     return "Future publisher 2 " + (withRetries ? "with" : "without") + " retries";
   }
-  
+
   private void channelOpenHandler(Channel rawChannel) throws IOException {
     rawChannel.exchangeDeclare(exchange, BuiltinExchangeType.FANOUT, true, false, null);
   }
@@ -65,7 +65,7 @@ public class Publisher implements RabbitMQPublisherStresser {
             .mapEmpty()
             ;
   }
-  
+
   @Override
   public Future<Void> shutdown() {
     return publisher.cancel();
@@ -73,7 +73,7 @@ public class Publisher implements RabbitMQPublisherStresser {
 
   @Override
   public Future<Void> runTest(long iterations) {
-    List<Future> confirmations = new ArrayList<>();
+    List<Future<?>> confirmations = new ArrayList<>();
     for (long i = 0; i < iterations; ++i) {
       String idString = "MSG:" + Long.toString(i);
       confirmations.add(
@@ -85,11 +85,11 @@ public class Publisher implements RabbitMQPublisherStresser {
               )
       );
     }
-    return CompositeFuture
+    return Future
             .all(confirmations)
             .compose(cf -> {
               return Future.<Void>succeededFuture();
             });
   }
-  
+
 }

@@ -23,8 +23,8 @@ import io.vertx.codegen.annotations.Nullable;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.internal.logging.Logger;
+import io.vertx.core.internal.logging.LoggerFactory;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.rabbitmq.impl.RabbitMQChannelImpl;
@@ -43,32 +43,32 @@ import java.util.function.Supplier;
  * @author jtalbut
  */
 public class RabbitMQChannelBuilder {
-  
+
   private static final Logger log = LoggerFactory.getLogger(RabbitMQChannelBuilder.class);
-  
+
   public static final RabbitMQMessageCodec<byte[]> BYTE_ARRAY_MESSAGE_CODEC = RabbitMQCodecManager.BYTE_ARRAY_MESSAGE_CODEC;
   public static final RabbitMQMessageCodec<Buffer> BUFFER_MESSAGE_CODEC = RabbitMQCodecManager.BUFFER_MESSAGE_CODEC;
   public static final RabbitMQMessageCodec<Object> NULL_MESSAGE_CODEC = RabbitMQCodecManager.NULL_MESSAGE_CODEC;
   public static final RabbitMQMessageCodec<String> STRING_MESSAGE_CODEC = RabbitMQCodecManager.STRING_MESSAGE_CODEC;
   public static final RabbitMQMessageCodec<JsonObject> JSON_OBJECT_MESSAGE_CODEC = RabbitMQCodecManager.JSON_OBJECT_MESSAGE_CODEC;
   public static final RabbitMQMessageCodec<JsonArray> JSON_ARRAY_MESSAGE_CODEC = RabbitMQCodecManager.JSON_ARRAY_MESSAGE_CODEC;
-  
+
   private final RabbitMQConnectionImpl connection;
   private final List<ChannelHandler> channelOpenHandlers = new ArrayList<>();
   private final RabbitMQCodecManager codecManager = new RabbitMQCodecManager();
   private final List<Handler<Channel>> channelRecoveryCallbacks = new ArrayList<>();
   private final List<Handler<ShutdownSignalException>> shutdownHandlers = new ArrayList<>();
-  
+
 
   /**
    * Constructor.
-   * 
+   *
    * @param connection The connection to open the channel on.
    */
   public RabbitMQChannelBuilder(RabbitMQConnectionImpl connection) {
     this.connection = connection;
   }
-  
+
   /**
    * Add a ChannelOpenHandler to the builder.
    * <p>
@@ -101,7 +101,7 @@ public class RabbitMQChannelBuilder {
     this.channelOpenHandlers.add(channelOpenHandler);
     return this;
   }
-  
+
   /**
    * Register a {@link RabbitMQMessageCodec}.
    * <p>
@@ -115,7 +115,7 @@ public class RabbitMQChannelBuilder {
     codecManager.registerCodec(codec);
     return this;
   }
-  
+
   /**
    * Register a {@link RabbitMQMessageCodec}.
    * <p>
@@ -132,34 +132,34 @@ public class RabbitMQChannelBuilder {
     codecManager.registerDefaultCodec(clazz, codec);
     return this;
   }
-  
+
   /**
    * Add a callback that will be called whenever the channel completes its own internal recovery process.
    * This callback must be idempotent - it will be called each time a connection is established, which may be multiple times against the same instance.
    * Callbacks will be added to a list and called in the order they were added, the only way to remove callbacks is to create a new channel.
-   * 
+   *
    * This callback is only useful if RabbitMQOptions.automaticRecoveryEnabled is true.
-   * 
+   *
    * Callbacks can be used for any kind of resetting that clients need to perform after the automatic recovery is complete.
    * Typically this callback is not required because the recovery mechanism (as opposed to the reconnect mechanism) automatically
    * tracks objects created on the channel.
-   * 
+   *
    * Callbacks will be called on a RabbitMQ thread, after topology recovery, and will block the completion of the recovery.
    * These callbacks have no interaction with Vertx and expose the raw channel.
-   * 
-   * @param channelRecoveryCallback 
+   *
+   * @param channelRecoveryCallback
    * @return       this, so that the builder may be used fluently.
    */
   public RabbitMQChannelBuilder withChannelRecoveryCallback(Handler<Channel> channelRecoveryCallback) {
     channelRecoveryCallbacks.add(channelRecoveryCallback);
     return this;
-  }  
+  }
 
   /**
    * Add a callback that will be called whenever the channel shuts down.
    *
    * Callbacks will be called on a RabbitMQ thread, and will block the completion of the shutdown (though the network connection is not usable at this time).
-   * 
+   *
    * @param handler
    * @return       this, so that the builder may be used fluently.
    */
@@ -170,14 +170,14 @@ public class RabbitMQChannelBuilder {
 
   /**
    * Add a callback that will be called when confirmation messages are received for published messages.
-   * 
+   *
    * The confirm handler will be called on a vertx thread (in the context of the publisher).
-   * 
-   * This method works by adding a channelOpenHandler that ensures that the confirm handler is added to the channel 
+   *
+   * This method works by adding a channelOpenHandler that ensures that the confirm handler is added to the channel
    * in the event of a reconnection.
-   * 
+   *
    * The openChannelHandlers are called in the order in which they are registered.
-   * 
+   *
    * @param handler The confirmation handler.
    * @return       this, so that the builder may be used fluently.
    * @see <a href="https://www.rabbitmq.com/confirms.html">Consumer Acknowledgements and Publisher Confirms</a>
@@ -190,27 +190,27 @@ public class RabbitMQChannelBuilder {
     });
     return this;
   }
-  
+
   public RabbitMQChannelBuilder withReturnedMessageHandler(Handle<Return> returnHandler) {
     channelOpenHandlers.add(chann -> {
       chann.addReturnListener(ret -> returnHandler.recycle(ret));
     });
     return this;
   }
-  
+
   /**
    * Set the QOS criteria to use on the channel.
-   * 
+   *
    * The default values are both 0, which implies unlimited.
-   * 
-   * This method works by adding a channelOpenHandler that ensures that the QOS settings are added to the channel 
+   *
+   * This method works by adding a channelOpenHandler that ensures that the QOS settings are added to the channel
    * in the event of a reconnection.
-   * 
+   *
    * It is usually a good idea to set a prefetch count to prevent a single consumer attempting to download all available messages
    * on a queue.
    * Be aware that if the client clients fails to ack (or nack) messages that have been fetched it will deadlock once it has fetched
    * its limit.
-   * 
+   *
    * @param prefetchSize The maximum size, in octets, of the messages that may be prefetched by the client.
    * Must not be negative.
    * @param prefetchCount The maximum number of message that may be prefetched by the client.
@@ -223,7 +223,7 @@ public class RabbitMQChannelBuilder {
       throw new IllegalArgumentException("Invalid prefetchCount");
     }
     if (prefetchSize < 0) {
-      throw new IllegalArgumentException("Invalid prefetchSize");      
+      throw new IllegalArgumentException("Invalid prefetchSize");
     }
     channelOpenHandlers.add(chann -> {
       chann.basicQos(prefetchSize, prefetchCount, true);
@@ -233,14 +233,14 @@ public class RabbitMQChannelBuilder {
 
   /**
    * Open a new channel from this builder.
-   * 
+   *
    * @return  A Future that will be completed with the channel when it is open.
    */
   public Future<RabbitMQChannel> openChannel() {
     RabbitMQChannelImpl channel = new RabbitMQChannelImpl(this);
     return channel.connect();
   }
-  
+
    /**
    * Creates a RabbitMQPublisher (using a new channel on this connection) that reliably sends messages.
    * @param <T> The type of data that will be passed in to the Publisher.
@@ -265,7 +265,7 @@ public class RabbitMQChannelBuilder {
 //  public Future<RabbitMQConsumer> createConsumer(String queue, RabbitMQConsumerOptions options) {
 //    return RabbitMQStreamConsumer1Impl.create(this, RabbitMQCodecManager.BYTE_ARRAY_MESSAGE_CODEC, null, options);
 //  }
-  
+
   /**
    * Create a RabbitMQConsumer (using a new channel on this connection) that reliably receives messages.
    * @param <T> The type of data that will be received by the Consumer.
@@ -289,7 +289,7 @@ public class RabbitMQChannelBuilder {
     }
     return RabbitMQConsumerImpl.create(this, codec, queueNameSuppler, options, handler);
   }
-  
+
   public RabbitMQConnectionImpl getConnection() {
     return connection;
   }
@@ -319,5 +319,5 @@ public class RabbitMQChannelBuilder {
     };
   }
 
-    
+
 }

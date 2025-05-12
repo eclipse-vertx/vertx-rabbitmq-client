@@ -13,8 +13,8 @@ package io.vertx.rabbitmq.impl;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.internal.logging.Logger;
+import io.vertx.core.internal.logging.LoggerFactory;
 import java.util.function.Function;
 
 /**
@@ -22,10 +22,10 @@ import java.util.function.Function;
  * @author jtalbut
  */
 public class CreateLock<T> {
-  
+
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(CreateLock.class);
-  
+
   @FunctionalInterface
   public interface ValueTest<T> {
     /**
@@ -35,7 +35,7 @@ public class CreateLock<T> {
      */
     boolean handle(T value);
   }
-  
+
   private final ValueTest<T> test;
   private final Object lock = new Object();
   private Future<T> createFuture;
@@ -47,11 +47,11 @@ public class CreateLock<T> {
     this.test = test == null ? v -> true : test;
     this.postCreateHandler = postCreateHandler;
   }
-  
+
   public <R> Future<R> create(
           Handler<Promise<T>> creator
           , Function<T, Future<R>> handler
-  ) {    
+  ) {
     boolean doCreate = false;
     T currentValue = null;
     Promise<R> result = null;
@@ -60,7 +60,7 @@ public class CreateLock<T> {
       if (value == null || !test.handle(value)) {
         if (createFuture == null) {
           createPromise = Promise.promise();
-          createFuture = createPromise.future();          
+          createFuture = createPromise.future();
           createFuture.onComplete(ar -> {
             synchronized(lock) {
               if (ar.failed()) {
@@ -91,7 +91,7 @@ public class CreateLock<T> {
         Promise promise = Promise.promise();
         createFuture.onComplete(ar -> {
           if (ar.succeeded()) {
-            handler.apply(ar.result()).onComplete(promise);            
+            handler.apply(ar.result()).onComplete(promise);
           } else {
             promise.fail(ar.cause());
           }
@@ -110,15 +110,15 @@ public class CreateLock<T> {
       return result.future();
     }
   }
-  
+
   public void unset() {
     synchronized(lock) {
       value = null;
     }
   }
-  
+
   public T get() {
     return value;
   }
-  
+
 }

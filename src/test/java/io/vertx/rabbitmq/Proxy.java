@@ -27,23 +27,23 @@ import org.slf4j.LoggerFactory;
  * @author jtalbut
  */
 public class Proxy {
-  
+
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(Proxy.class);
-  
+
   private final Vertx vertx;
   private final int srcPort;
   private final int dstPort;
 
   private NetServer proxyServer;
   private NetClient proxyClient;
-  
+
   public Proxy(Vertx vertx, int srcPort, int dstPort) {
     this.vertx = vertx;
     this.srcPort = srcPort;
     this.dstPort = dstPort;
   }
-  
+
   public Proxy(Vertx vertx, int dstPort) throws IOException {
     this.vertx = vertx;
     this.dstPort = dstPort;
@@ -56,10 +56,10 @@ public class Proxy {
 
   private static int findPort() throws IOException {
     try (ServerSocket socket = new ServerSocket(0)) {
-      return socket.getLocalPort();     
-    }    
+      return socket.getLocalPort();
+    }
   }
-  
+
   public void startProxy() throws Exception {
     CompletableFuture<Void> latch = new CompletableFuture<>();
     NetClientOptions clientOptions = new NetClientOptions();
@@ -69,7 +69,7 @@ public class Proxy {
     proxyServer = vertx.createNetServer().connectHandler(serverSocket -> {
       serverSocket.pause();
       logger.warn("Proxy server connected: {} -> {}", serverSocket.remoteAddress(), serverSocket.localAddress());
-      proxyClient.connect(dstPort, "localhost", ar -> {
+      proxyClient.connect(dstPort, "localhost").onComplete(ar -> {
         if (ar.succeeded()) {
           NetSocket clientSocket = ar.result();
           logger.warn("Proxy client connected: {} -> {}", clientSocket.localAddress(), clientSocket.remoteAddress());
@@ -91,7 +91,8 @@ public class Proxy {
           serverSocket.close();;
         }
       });
-    }).listen(srcPort, "localhost", ar -> {
+    });
+    proxyServer.listen(srcPort, "localhost").onComplete(ar -> {
       if (ar.succeeded()) {
         logger.warn("Proxy started from {} to {}", srcPort, dstPort);
         latch.complete(null);
@@ -100,16 +101,16 @@ public class Proxy {
         latch.completeExceptionally(ar.cause());
       }
     });
-    latch.get(10, TimeUnit.SECONDS);    
+    latch.get(10, TimeUnit.SECONDS);
   }
-  
+
   public void stopProxy() {
     if (proxyServer != null) {
       proxyServer.close();
     }
     if (proxyClient != null) {
       proxyClient.close();
-    }    
+    }
   }
-  
+
 }

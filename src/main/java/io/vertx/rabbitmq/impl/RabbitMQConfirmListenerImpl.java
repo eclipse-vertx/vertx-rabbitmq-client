@@ -13,8 +13,8 @@ package io.vertx.rabbitmq.impl;
 import com.rabbitmq.client.ConfirmListener;
 import io.vertx.core.Context;
 import io.vertx.core.Handler;
-import io.vertx.core.impl.logging.Logger;
-import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.internal.logging.Logger;
+import io.vertx.core.internal.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQConfirmation;
 import java.io.IOException;
 
@@ -26,7 +26,7 @@ public class RabbitMQConfirmListenerImpl implements ConfirmListener {
 
   @SuppressWarnings("constantname")
   private static final Logger logger = LoggerFactory.getLogger(RabbitMQConfirmListenerImpl.class);
-  
+
   private final Context handlerContext;
   private final int channelNumber;
   private final Handler<RabbitMQConfirmation> handler;
@@ -42,7 +42,7 @@ public class RabbitMQConfirmListenerImpl implements ConfirmListener {
     logger.debug("handleNack(" + deliveryTag + ", " + multiple + ")");
     this.handlerContext.runOnContext(v -> handleAck(deliveryTag, multiple, false));
   }
-  
+
   public RabbitMQConfirmListenerImpl(int channelNumber, Context context, Handler<RabbitMQConfirmation> handler) {
     this.channelNumber = channelNumber;
     this.handlerContext = context;
@@ -51,6 +51,6 @@ public class RabbitMQConfirmListenerImpl implements ConfirmListener {
 
   void handleAck(long deliveryTag, boolean multiple, boolean succeeded) {
     this.handler.handle(new RabbitMQConfirmation(channelNumber, deliveryTag, multiple, succeeded));
-  }  
+  }
 
 }
