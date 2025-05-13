@@ -10,8 +10,9 @@
   */
 package examples;
 
-import io.netty.util.CharsetUtil;
 import io.vertx.rabbitmq.*;
+
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
@@ -34,7 +35,7 @@ public class CustomStringCodec implements RabbitMQMessageCodec<String> {
   @Override
   public byte[] encodeToBytes(String value) {
     Deflater deflater = new Deflater();
-    byte[] input = value.getBytes(CharsetUtil.UTF_16);
+    byte[] input = value.getBytes(StandardCharsets.UTF_16);
     deflater.setInput(input);
     deflater.finish();
     int upperboundonlength = input.length + ((input.length + 7) >> 3) + ((input.length + 63) >> 6) + 5;
@@ -51,7 +52,7 @@ public class CustomStringCodec implements RabbitMQMessageCodec<String> {
     byte[] output = new byte[data.length * 2];
     try {
       int bytes = inflater.inflate(output);
-      return new String(Arrays.copyOf(output, bytes), CharsetUtil.UTF_16);
+      return new String(Arrays.copyOf(output, bytes), StandardCharsets.UTF_16);
     } catch(DataFormatException ex) {
       return "";
     }
