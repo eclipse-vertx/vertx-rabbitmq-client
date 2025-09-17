@@ -19,5 +19,5 @@ Please see the main documentation on the web-site for a full description:
 The tests all use a instances of rabbit dynamically created in a local docker instance (i.e. the user running the tests must have permission to create docker containers).
 
 ```
-% mvn test
+mvn test
 ```
