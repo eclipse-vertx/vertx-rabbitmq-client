@@ -16,7 +16,7 @@ Please see the main documentation on the web-site for a full description:
 
 # Running the tests
 
-The tests all use a instances of rabbit dynamically created in a local docker instance (i.e. the user running the tests must have permission to create docker containers).
+The tests all use a instances of RabbitMQ dynamically created in a local docker instance (i.e. the user running the tests must have permission to create docker containers).
 
 ```
 mvn test
